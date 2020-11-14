@@ -1,5 +1,7 @@
 # pads-capm
 
+CAPM and dynamic time series modelling for the following commodities portfolio:
+
 Cocoa
 Coffee
 Cotton
