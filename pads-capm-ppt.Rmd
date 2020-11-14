@@ -1,0 +1,81 @@
+---
+title: "pads-capm"
+author: "Viviane Sanchez"
+date: "11/14/2020"
+output: ioslides_presentation
+runtime: shiny
+---
+
+# Introdução
+
+- como colocar o token no ambiente:
+
+abra o ambiente com o comanto
+`usethis::edit_r_environ()`
+
+ copie a linha abaixo com seu token
+
+QUANDL_TOKEN=(token)
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+library(tidyquant)
+library(tidymodels)
+
+
+quandl_api_key(Sys.getenv("QUANDL_TOKEN"))
+
+```
+
+
+# Preços 
+
+Precos dos primeiros vencimentos de cada commodity
+
+```{r }
+
+
+cmdty_name <- c("sugar","cocoa","cotton","coffee", "orange_juice")
+
+tickers <-  c("CHRIS/ICE_SB1", "CHRIS/ICE_CC1", 
+              "CHRIS/ICE_CT1","CHRIS/ICE_KC1", 
+              "CHRIS/ICE_OJ1")
+
+
+
+cmdty_raw <- tq_get(tickers, get = "quandl", from = "2020-01-01", to  = Sys.Date()) %>% 
+  left_join(tibble(cmdty = cmdty_name,
+                   symbol = tickers), by = "symbol")
+
+
+
+cmdty_raw %>% 
+  glimpse
+
+```
+
+## Bullets
+
+- Bullet 1
+- Bullet 2
+- Bullet 3
+
+## R Output
+
+```{r cars}
+
+cmdty_raw %>% 
+  ggplot(aes(x = date, y = settle, color = cmdty)) +
+  geom_line()
+
+
+
+
+
+
+```
+
+
