@@ -1,8 +1,8 @@
 ---
 title: "Modelos Dinâmicos em Soft Commodities"
 subtitle: "Financial Analytics"
-institute: "Programa Avançado em Data Science - Insper"
-author: "Luís Fechio, Viviane Sanchez"
+#institute: "Programa Avançado em Data Science - Insper"
+author: "Luis Fechio, Viviane Sanchez"
 date: "11/28/2020"
 output: ioslides_presentation
 #  xaringan::moon_reader:
