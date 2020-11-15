@@ -4,13 +4,13 @@ subtitle: "Financial Analytics"
 institute: "Programa Avançado em Data Science - Insper"
 author: "Luís Fechio, Viviane Sanchez"
 date: "11/28/2020"
-output:
-  xaringan::moon_reader:
-    lib_dir: libs
-    nature:
-      highlightStyle: github
-      highlightLines: true
-      countIncrementalSlides: false
+output: ioslides_presentation
+#  xaringan::moon_reader:
+#    lib_dir: libs
+#    nature:
+#      highlightStyle: github
+#      highlightLines: true
+#      countIncrementalSlides: false
 #runtime: shiny
 ---
 
@@ -60,9 +60,7 @@ quandl_api_key(Sys.getenv("QUANDL_TOKEN"))
 
 ```
 
----
-
-# Introdução
+## Introdução
 
 Modelagem dinâmica dos preços das commodities softs listadas na [Intercontinental Exchange (ICE)](https://www.theice.com/products/Futures-Options/Agriculture)
 
@@ -72,8 +70,9 @@ Modelagem dinâmica dos preços das commodities softs listadas na [Intercontinen
 - Café - `coffee`
 - Suco de laranja congelado - `orange_juice`
 
+
 ---
-# Preços
+## Preços
 
 ```{r Read Prices}
 
