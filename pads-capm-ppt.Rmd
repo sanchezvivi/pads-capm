@@ -35,7 +35,7 @@ quandl_api_key(Sys.getenv("QUANDL_TOKEN"))
 
 Precos dos primeiros vencimentos de cada commodity
 
-```{r }
+```{r Read Prices}
 
 
 cmdty_name <- c("sugar","cocoa","cotton","coffee", "orange_juice")
@@ -65,7 +65,7 @@ cmdty_raw %>%
 
 ## R Output
 
-```{r cars}
+```{r Grafico1 - Prices}
 
 cmdty_raw %>% 
   ggplot(aes(x = date, y = settle, color = cmdty)) +
@@ -78,4 +78,10 @@ cmdty_raw %>%
 
 ```
 
+```{r Grafico2 - Retornos}
+cmdty_raw %>% 
+  ggplot(aes(x = date, y = change, color = cmdty)) +
+  geom_line()
+
+```
 
