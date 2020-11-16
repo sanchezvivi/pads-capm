@@ -76,6 +76,10 @@ Como benchmark, será utilizado ..... (BRL? DXY? BCOM?)
 
 [BCOM](https://www.bloomberg.com/company/press/bloomberg-commodity-index-2020-target-weights-announced/)
 
+---
+# Objetivo
+
+comparar cada método, explicitando os prós e contras de cada alternativa e fazer uma conclusão de qual deles considera mais apropriado para cada ativo. A avaliação do método mais adequado deverá ser tanto em termos do que faz sentido teórico (interpretação dos coeficientes ao longo do tempo) quanto em termos quantitativos ao realizar um backtest e comparar as métricas para diferentes abordagens.
 
 ---
 ## Preços
@@ -218,18 +222,15 @@ tidy_lm %>%
   pivot_wider(names_from = term, values_from = estimate) %>% 
   janitor::clean_names() %>% 
   fill(intercept) %>% na.omit() %>% 
-  rename(slope = bmk_return) %>% 
+  rename(beta = bmk_return) %>% 
   #filter(term == "bmk_return") %>% 
   unnest(returns) %>% 
   ggplot(aes(x = bmk_return, y = daily_return, color = cmdty)) +
   geom_point(alpha  = 0.3) +
-  geom_abline(aes(intercept = intercept, slope = slope))+ 
+  geom_abline(aes(intercept = intercept, slope = beta))+ 
   facet_wrap(~cmdty)+
   scale_color_manual(values = hc_cols) +
   labs(x = "Benchmark Returns", y = "Commodity Returns")
-
-
-?geom_abline
 
 ```
 
@@ -249,6 +250,16 @@ tidy_lm %>%
 ```
 
 ## CAPM Dinâmico
+
+```{r}
+
+
+
+
+```
+
+
+## CAPM com modelo de Volatilidade
 
 ```{r}
 
