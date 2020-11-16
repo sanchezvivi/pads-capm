@@ -25,13 +25,13 @@ library(ggrepel)
 library(highcharter)
 library(shiny)
 library(knitr)
+library(skimr)
 
 library(timetk)
 
-library(tidyverse)
 library(tidyquant)
 library(tidymodels)
-
+library(tidyverse)
 
 load_rmetrics_calendars(2000:year(Sys.Date())+1)
 #calendars()
@@ -40,7 +40,9 @@ bizdays.options$set(default.calendar='Rmetrics/NYSE')
 theme_set(theme_minimal())
 theme_update(text = element_text(family = "Open Sans"),
              plot.title = element_text(face = "bold", size = 23,
-                                       color = "#1d3752"))
+                                       color = "#1d3752"),
+             legend.position = "bottom")
+
 hc_cols <- c("#7cb5ec", "#434348", "#90ed7d", "#f7a35c", 
              "#8085e9", "#f15c80", "#e4d354", "#2b908f", 
              "#f45b5b", "#91e8e1")
@@ -60,7 +62,7 @@ quandl_api_key(Sys.getenv("QUANDL_TOKEN"))
 
 ```
 
-## Introdução
+# Introdução
 
 Modelagem dinâmica dos preços das commodities softs listadas na [Intercontinental Exchange (ICE)](https://www.theice.com/products/Futures-Options/Agriculture)
 
@@ -70,6 +72,10 @@ Modelagem dinâmica dos preços das commodities softs listadas na [Intercontinen
 - Café - `coffee`
 - Suco de laranja congelado - `orange_juice`
 
+Como benchmark, será utilizado ..... (BRL? DXY? BCOM?)
+
+[BCOM](https://www.bloomberg.com/company/press/bloomberg-commodity-index-2020-target-weights-announced/)
+
 
 ---
 ## Preços
@@ -77,11 +83,11 @@ Modelagem dinâmica dos preços das commodities softs listadas na [Intercontinen
 ```{r Read Prices}
 
 
-cmdty_name <- c("sugar","cocoa","cotton","coffee", "orange_juice")
+cmdty_name <- c("sugar","cocoa","cotton","coffee", "orange_juice", "xbcom")
 
 tickers <-  c("CHRIS/ICE_SB1", "CHRIS/ICE_CC1", 
               "CHRIS/ICE_CT1","CHRIS/ICE_KC1", 
-              "CHRIS/ICE_OJ1")
+              "CHRIS/ICE_OJ1", "CHRIS/CME_AW1")
 
 cmdty_raw <- tq_get(tickers, get = "quandl", from = "2018-01-01", to  = Sys.Date()) %>% 
               #na.omit() %>% 
@@ -136,6 +142,23 @@ cmdty_raw %>%
 
 ```
 
+
+## Retornos Acumulado
+
+```{r Grafico2 - Retornos}
+
+cmdty_raw %>% 
+      mutate(daily_return = daily_return*100) %>% 
+      hchart(., "line", 
+             hcaes(x = date, y = acc_return, group = cmdty)) %>% 
+      #hc_colors(cols) %>%
+      hc_tooltip(valueDecimals = 2) %>% 
+      hc_xAxis(title = list(text = "Data")) %>% 
+      hc_yAxis(title = list(text = "Retorno Acumulado"),
+               labels = list(format = "{value}%"))
+
+```
+
 ---
 ## Volatilidade
 
@@ -153,3 +176,88 @@ cmdty_raw %>%
 
 ```
 
+# CAPM 
+
+## CAPM Estático
+
+
+```{r echo = FALSE}
+
+# preparação da base
+returns_tb <- cmdty_raw %>% 
+  filter(cmdty != "xbcom") %>%  
+  select(cmdty, date, daily_return) %>% 
+  left_join(cmdty_raw %>%  
+              select(cmdty, date, daily_return) %>% 
+              filter(cmdty == "xbcom") %>% 
+              rename(benchmark = cmdty, 
+                     bmk_return = daily_return), by = "date") %>% 
+  na.omit() %>% 
+  select(-date) %>% 
+  group_by(cmdty) %>% 
+  nest(returns = c(daily_return, bmk_return))
+
+# ajuste dos modelos
+tidy_capm <- returns_tb %>% 
+  mutate(model = map(returns, ~lm(daily_return ~ bmk_return, data = .x)))
+  
+# resuttado dos modelos
+tidy_lm <- tidy_capm %>%
+  mutate(coefs = map(model, tidy)) %>%
+  unnest(coefs) %>%
+  #filter(term == "bmk_return") %>%
+  mutate(p.value = p.adjust(p.value))
+
+```
+
+## Resultados
+
+```{r echo = FALSE}
+
+tidy_lm %>% 
+  pivot_wider(names_from = term, values_from = estimate) %>% 
+  janitor::clean_names() %>% 
+  fill(intercept) %>% na.omit() %>% 
+  rename(slope = bmk_return) %>% 
+  #filter(term == "bmk_return") %>% 
+  unnest(returns) %>% 
+  ggplot(aes(x = bmk_return, y = daily_return, color = cmdty)) +
+  geom_point(alpha  = 0.3) +
+  geom_abline(aes(intercept = intercept, slope = slope))+ 
+  facet_wrap(~cmdty)+
+  scale_color_manual(values = hc_cols) +
+  labs(x = "Benchmark Returns", y = "Commodity Returns")
+
+
+?geom_abline
+
+```
+
+```{r}
+
+tidy_lm %>%
+  #filter(term == "bmk_return") %>%
+  ggplot(aes(estimate, p.value, label = cmdty)) +
+  geom_vline(xintercept = 0, lty = 2,
+    size = 1.5, alpha = 0.7, color = "gray50") +
+  geom_point(aes(color = cmdty), alpha = 0.8, size = 2.5, show.legend = FALSE) +
+  scale_y_log10() +
+  facet_wrap(~term) +
+  geom_text_repel(size = 3) +
+  scale_color_manual(values = hc_cols)
+
+```
+
+## CAPM Dinâmico
+
+```{r}
+
+
+
+
+```
+
+
+# Referências
+
+- [Train and analyze many models for #TidyTuesday crop yields](https://juliasilge.com/blog/crop-yields/)
