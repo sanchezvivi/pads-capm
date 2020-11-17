@@ -47,7 +47,7 @@ hc_cols <- c("#7cb5ec", "#434348", "#90ed7d", "#f7a35c",
              "#8085e9", "#f15c80", "#e4d354", "#2b908f", 
              "#f45b5b", "#91e8e1")
 
-options(digits=4)
+options(digits=6)
 
 quandl_api_key(Sys.getenv("QUANDL_TOKEN"))
 
@@ -82,30 +82,12 @@ Como benchmark, será utilizado ..... (BRL? DXY? BCOM?)
 
 comparar cada método, explicitando os prós e contras de cada alternativa e fazer uma conclusão de qual deles considera mais apropriado para cada ativo. A avaliação do método mais adequado deverá ser tanto em termos do que faz sentido teórico (interpretação dos coeficientes ao longo do tempo) quanto em termos quantitativos ao realizar um backtest e comparar as métricas para diferentes abordagens.
 
----
-
-# Mercado Futuro
-
-Volume negociado = número de contratos
-
-1 contrato = 50,8024 t 
-
-
-Notional = 1120 * 15,3 * qtde contratos = 
-
-```{r}
-
-#puxar imagem
-
-# shiny
-
-```
 
 ---
 
 ## Preços
 
-```{r Read Prices}
+```{r Read Prices, echo=FALSE}
 
 
 cmdty_name <- c("sugar","cocoa","cotton","coffee", "orange_juice", "xbcom")
@@ -131,6 +113,97 @@ cmdty_raw <- tq_get(tickers, get = "quandl", from = "2018-01-01", to  = Sys.Date
 
 #cmdty_raw %>% 
  # glimpse
+
+```
+
+
+## Contrato
+
+
+
+```{r}
+
+#include_graphics("img/ppt/Slide2.png")
+
+selectInput("ticker_id", label = "Commodity", choices = conv_tb$cmdty,
+            multiple = F,
+            selected = "sugar")
+
+numericInput("lots_id", label = "Número de lotes",
+            value = 1000000, step = 1000) 
+
+uiOutput("price_input")
+
+actionButton("update_button", "Atualizar")
+
+```
+
+```{r}
+
+valueBox(value = formatC(paste(weight(), " Toneladas"), format = 's'),
+         icon = "fa-user",
+         color = hc_cols[1])
+
+valueBox(value = formatC(paste(notional(), " Dólares"), format = 's'),
+         icon = "fa-user",
+         color =  hc_cols[3])
+
+
+```
+
+```{r echo = FALSE, context="server"}
+
+conv_tb <- tibble(cmdty =  c("sugar","cocoa","cotton","coffee", "orange_juice"),
+                  contract_size = c(112000, 10, 50000, 37500, 15000),
+                  unit = c("lb", "lb", "lb","t","lb"),
+                  tick_size = c(0.01, 1, 0.01, 0.05, 0.05))
+
+choice_tick <- reactive({
+ contract_size <- conv_tb %>% 
+      filter(cmdty == input$ticker_id) %>% 
+      pull(tick_size)})
+ 
+price <- reactive({cmdty_raw %>% 
+  filter(cmdty == input$cmdty, date == max(date)) %>% 
+  #filter(cmdty == "sugar", date == max(date)) %>% 
+  pull(settle)})
+
+contract_size <- reactive({ conv_tb %>% 
+      filter(cmdty == input$ticker_id) %>% 
+      pull(contract_size)})
+
+output$price_input <- renderUI({
+  
+numericInput("price_id", label = "Número de lotes",
+            value = price(), step = choice_tick()) 
+  })
+
+weight <- reactive({
+  
+  isolate({
+
+    unit <- conv_tb %>% 
+      filter(cmdty == input$ticker_id) %>% 
+      pull(unit)
+    
+    if(unit == "lb"){input$lots * contract_size/(2.20462*1000)}
+    else{input$lots * contract_size}
+  
+})
+  
+})
+
+
+notional <- reactive({
+  
+  contract_size <- conv_tb %>% 
+      filter(cmdty == input$ticker_id) %>% 
+      pull(unit)
+  
+  isolate({input$lots * input$price * choice_tick() * contract_size() })
+  
+})
+
 
 ```
 
