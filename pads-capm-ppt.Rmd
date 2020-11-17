@@ -77,11 +77,32 @@ Como benchmark, será utilizado ..... (BRL? DXY? BCOM?)
 [BCOM](https://www.bloomberg.com/company/press/bloomberg-commodity-index-2020-target-weights-announced/)
 
 ---
+
 # Objetivo
 
 comparar cada método, explicitando os prós e contras de cada alternativa e fazer uma conclusão de qual deles considera mais apropriado para cada ativo. A avaliação do método mais adequado deverá ser tanto em termos do que faz sentido teórico (interpretação dos coeficientes ao longo do tempo) quanto em termos quantitativos ao realizar um backtest e comparar as métricas para diferentes abordagens.
 
 ---
+
+# Mercado Futuro
+
+Volume negociado = número de contratos
+
+1 contrato = 50,8024 t 
+
+
+Notional = 1120 * 15,3 * qtde contratos = 
+
+```{r}
+
+#puxar imagem
+
+# shiny
+
+```
+
+---
+
 ## Preços
 
 ```{r Read Prices}
@@ -149,7 +170,7 @@ cmdty_raw %>%
 
 ## Retornos Acumulado
 
-```{r Grafico2 - Retornos}
+```{r Grafico3 - Retornos}
 
 cmdty_raw %>% 
       mutate(daily_return = daily_return*100) %>% 
@@ -183,7 +204,6 @@ cmdty_raw %>%
 # CAPM 
 
 ## CAPM Estático
-
 
 ```{r echo = FALSE}
 
@@ -257,7 +277,6 @@ tidy_lm %>%
 
 
 ```
-
 
 ## CAPM com modelo de Volatilidade
 
