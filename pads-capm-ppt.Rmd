@@ -1,21 +1,27 @@
 ---
 title: "Modelos Dinâmicos em Soft Commodities"
 subtitle: "Financial Analytics"
-#institute: "Programa Avançado em Data Science - Insper"
+institute: "Programa Avançado em Data Science - Insper"
 author: "Luis Fechio, Viviane Sanchez"
 date: "11/28/2020"
-output: ioslides_presentation
-#  xaringan::moon_reader:
-#    lib_dir: libs
-#    nature:
-#      highlightStyle: github
-#      highlightLines: true
-#      countIncrementalSlides: false
+output: #ioslides_presentation
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
 #runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+
+knitr::opts_chunk$set(
+  fig.showtext = TRUE,
+  fig.width = 16, 
+  fig.height = 8, 
+  dpi = 300
+)
 
 library(RcppRoll)
 library(bizdays)
@@ -24,6 +30,7 @@ library(derivmkts)
 library(ggrepel)
 library(highcharter)
 library(shiny)
+library(flexdashboard)
 library(knitr)
 library(skimr)
 
@@ -59,6 +66,13 @@ quandl_api_key(Sys.getenv("QUANDL_TOKEN"))
 # copie a linha abaixo com seu token
 #
 #QUANDL_TOKEN=(token)
+
+
+#upgrade xaringan
+
+#remotes::install_github('yihui/xaringan', upgrade = TRUE)
+
+#xaringan::inf_mr()
 
 ```
 
@@ -114,100 +128,13 @@ cmdty_raw <- tq_get(tickers, get = "quandl", from = "2018-01-01", to  = Sys.Date
 #cmdty_raw %>% 
  # glimpse
 
+#conv_tb <- tibble(cmdty =  c("sugar","cocoa","cotton","coffee", "orange_juice"),
+#                  contract_size = c(112000, 10, 50000, 37500, 15000),
+#                  unit = c("lb", "lb", "lb","t","lb"),
+#                  tick_size = c(0.01, 1, 0.01, 0.05, 0.05))
+#
 ```
 
-
-## Contrato
-
-
-
-```{r}
-
-#include_graphics("img/ppt/Slide2.png")
-
-selectInput("ticker_id", label = "Commodity", choices = conv_tb$cmdty,
-            multiple = F,
-            selected = "sugar")
-
-numericInput("lots_id", label = "Número de lotes",
-            value = 1000000, step = 1000) 
-
-uiOutput("price_input")
-
-actionButton("update_button", "Atualizar")
-
-```
-
-```{r}
-
-valueBox(value = formatC(paste(weight(), " Toneladas"), format = 's'),
-         icon = "fa-user",
-         color = hc_cols[1])
-
-valueBox(value = formatC(paste(notional(), " Dólares"), format = 's'),
-         icon = "fa-user",
-         color =  hc_cols[3])
-
-
-```
-
-```{r echo = FALSE, context="server"}
-
-conv_tb <- tibble(cmdty =  c("sugar","cocoa","cotton","coffee", "orange_juice"),
-                  contract_size = c(112000, 10, 50000, 37500, 15000),
-                  unit = c("lb", "lb", "lb","t","lb"),
-                  tick_size = c(0.01, 1, 0.01, 0.05, 0.05))
-
-choice_tick <- reactive({
- contract_size <- conv_tb %>% 
-      filter(cmdty == input$ticker_id) %>% 
-      pull(tick_size)})
- 
-price <- reactive({cmdty_raw %>% 
-  filter(cmdty == input$cmdty, date == max(date)) %>% 
-  #filter(cmdty == "sugar", date == max(date)) %>% 
-  pull(settle)})
-
-contract_size <- reactive({ conv_tb %>% 
-      filter(cmdty == input$ticker_id) %>% 
-      pull(contract_size)})
-
-output$price_input <- renderUI({
-  
-numericInput("price_id", label = "Número de lotes",
-            value = price(), step = choice_tick()) 
-  })
-
-weight <- reactive({
-  
-  isolate({
-
-    unit <- conv_tb %>% 
-      filter(cmdty == input$ticker_id) %>% 
-      pull(unit)
-    
-    if(unit == "lb"){input$lots * contract_size/(2.20462*1000)}
-    else{input$lots * contract_size}
-  
-})
-  
-})
-
-
-notional <- reactive({
-  
-  contract_size <- conv_tb %>% 
-      filter(cmdty == input$ticker_id) %>% 
-      pull(unit)
-  
-  isolate({input$lots * input$price * choice_tick() * contract_size() })
-  
-})
-
-
-```
-
----
 ## Série de preços
 
 ```{r Grafico1 - Prices}
