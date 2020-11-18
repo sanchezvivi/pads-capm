@@ -40,6 +40,8 @@ library(tidyquant)
 library(tidymodels)
 library(tidyverse)
 
+library(dlm)
+
 load_rmetrics_calendars(2000:year(Sys.Date())+1)
 #calendars()
 bizdays.options$set(default.calendar='Rmetrics/NYSE')
@@ -102,7 +104,6 @@ comparar cada método, explicitando os prós e contras de cada alternativa e f
 ## Preços
 
 ```{r Read Prices, echo=FALSE}
-
 
 cmdty_name <- c("sugar","cocoa","cotton","coffee", "orange_juice", "xbcom")
 
@@ -269,13 +270,105 @@ tidy_lm %>%
 
 ```
 
+## CAPM Rolling Window
+
+```{r echo = FALSE}
+sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar')
+cocoaRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cocoa')
+cottonRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cotton')
+coffeeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'coffee')
+orangeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'orange_juice')
+
+nPer <- nrow(sugarRets)
+nDiv <- 2
+w0 <- round(nPer/nDiv, 0)
+wf <- (nPer - w0)
+
+rBetas <- matrix(NA, wf, 5)
+for (t in 1:wf){
+  sugar_fit = lm(sugarRets$daily_return[t:(w0+t)] ~ sugarRets$bmk_return[t:(w0+t)])
+  cocoa_fit = lm(cocoaRets$daily_return[t:(w0+t)] ~ cocoaRets$bmk_return[t:(w0+t)])
+  cotton_fit = lm(cottonRets$daily_return[t:(w0+t)] ~ cottonRets$bmk_return[t:(w0+t)])
+  coffee_fit = lm(coffeeRets$daily_return[t:(w0+t)] ~ coffeeRets$bmk_return[t:(w0+t)])
+  orange_fit = lm(orangeRets$daily_return[t:(w0+t)] ~ orangeRets$bmk_return[t:(w0+t)])
+
+  rBetas[t,]= c(sugar_fit$coefficients[2],
+               cocoa_fit$coefficients[2],
+               cotton_fit$coefficients[2],
+               coffee_fit$coefficients[2],
+               orange_fit$coefficients[2])
+}
+
+sBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
+ts.plot(rBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Rolling Betas')
+abline(h=filter(sBetas, cmdty == 'sugar')[2], col=hc_cols[1], lty=2)
+abline(h=filter(sBetas, cmdty == 'cocoa')[2], col=hc_cols[2], lty=2)
+abline(h=filter(sBetas, cmdty == 'cotton')[2], col=hc_cols[3], lty=2)
+abline(h=filter(sBetas, cmdty == 'coffee')[2], col=hc_cols[4], lty=2)
+abline(h=filter(sBetas, cmdty == 'orange_juice')[2], col=hc_cols[5], lty=2)
+abline(h=1, col=hc_cols[6], lty=1)
+legend("bottom", col=hc_cols[1:5], lty=1,
+       legend=cmdty_name[1:5],
+       lwd = 2, cex=0.6, box.lty=2)
+
+
+
+
+```
+
 ## CAPM Dinâmico
 
 ```{r}
 
+ret_sugar <- cmdty_raw %>% 
+  select('cmdty','daily_return') %>% 
+  filter(cmdty == 'sugar')
+
+ret_cocoa <- cmdty_raw %>% 
+  select('cmdty','daily_return') %>% 
+  filter(cmdty == 'cocoa')
+
+ret_cotton <- cmdty_raw %>% 
+  select('cmdty','daily_return') %>% 
+  filter(cmdty == 'cotton')
+
+ret_coffee <- cmdty_raw %>% 
+  select('cmdty','daily_return') %>% 
+  filter(cmdty == 'coffee')
+
+ret_xbcom <- cmdty_raw %>% 
+  select('cmdty','daily_return') %>% 
+  filter(cmdty == 'xbcom')
+```
 
 
 
+```{r}
+
+# ajuste dos modelos
+tidy_DLM <- returns_tb %>% 
+  mutate(model = map(returns, ~lm(daily_return ~ bmk_return, data = .x)))
+
+
+# set up DLM
+dlmFun <- function(parm,x.mat){
+  parm = exp(parm)
+  return(dlmModReg(X=x.mat, dV=parm[1], dW= c(parm[2],parm[3])) )
+}
+
+# estimate parameters
+dlmFit <- dlmMLE(y=ret_cocoa$daily_return[-1],
+              parm=c(1,1,1),
+              x.mat=ret_xbcom$daily_return,
+              build=dlmFun,
+              hessian=T)
+```
+
+
+```{r}
+# get estimates
+se =  sqrt(exp(dlmFit$par))
+se
 ```
 
 ## CAPM com modelo de Volatilidade
