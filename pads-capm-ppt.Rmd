@@ -274,8 +274,9 @@ tidy_lm %>%
 
 ```
 
-## CAPM Rolling Window
+## CAPM Dynamic Windows
 
+### Preparação da base e definição das janelas.
 ```{r echo = FALSE}
 
 sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar')
@@ -288,7 +289,11 @@ nPer <- nrow(sugarRets)
 nDiv <- 2
 w0 <- round(nPer/nDiv, 0)
 wf <- (nPer - w0)
+```
 
+## CAPM Rolling Window
+
+```{r echo = FALSE}
 rBetas <- matrix(NA, wf, 5)
 for (t in 1:wf){
   sugar_fit = lm(sugarRets$daily_return[t:(w0+t)] ~ sugarRets$bmk_return[t:(w0+t)])
@@ -321,7 +326,43 @@ legend("bottom", col=hc_cols[1:5], lty=1,
 
 ```
 
-## CAPM Dinâmico
+## CAPM Expanding Window
+
+```{r echo = FALSE}
+
+eBetas <- matrix(NA, wf, 5)
+for (t in 1:wf){
+  sugar_fit = lm(sugarRets$daily_return[1:(w0+t)] ~ sugarRets$bmk_return[1:(w0+t)])
+  cocoa_fit = lm(cocoaRets$daily_return[1:(w0+t)] ~ cocoaRets$bmk_return[1:(w0+t)])
+  cotton_fit = lm(cottonRets$daily_return[1:(w0+t)] ~ cottonRets$bmk_return[1:(w0+t)])
+  coffee_fit = lm(coffeeRets$daily_return[1:(w0+t)] ~ coffeeRets$bmk_return[1:(w0+t)])
+  orange_fit = lm(orangeRets$daily_return[1:(w0+t)] ~ orangeRets$bmk_return[1:(w0+t)])
+
+  eBetas[t,]= c(sugar_fit$coefficients[2],
+               cocoa_fit$coefficients[2],
+               cotton_fit$coefficients[2],
+               coffee_fit$coefficients[2],
+               orange_fit$coefficients[2])
+}
+
+eBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
+ts.plot(rBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Rolling Betas')
+abline(h=filter(sBetas, cmdty == 'sugar')[2], col=hc_cols[1], lty=2)
+abline(h=filter(sBetas, cmdty == 'cocoa')[2], col=hc_cols[2], lty=2)
+abline(h=filter(sBetas, cmdty == 'cotton')[2], col=hc_cols[3], lty=2)
+abline(h=filter(sBetas, cmdty == 'coffee')[2], col=hc_cols[4], lty=2)
+abline(h=filter(sBetas, cmdty == 'orange_juice')[2], col=hc_cols[5], lty=2)
+abline(h=1, col=hc_cols[6], lty=1)
+legend("bottom", col=hc_cols[1:5], lty=1,
+       legend=cmdty_name[1:5],
+       lwd = 2, cex=0.6, box.lty=2)
+
+
+
+
+```
+
+## CAPM Dynamic Linear Models (DLM)
 
 ```{r}
 
