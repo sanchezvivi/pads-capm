@@ -239,16 +239,19 @@ tidy_lm <- tidy_capm %>%
 
 ```{r echo = FALSE}
 
-tidy_lm %>% 
+tidier_lm <- tidy_lm %>% 
   pivot_wider(names_from = term, values_from = estimate) %>% 
   janitor::clean_names() %>% 
   fill(intercept) %>% na.omit() %>% 
-  rename(beta = bmk_return) %>% 
-  #filter(term == "bmk_return") %>% 
+  rename(alpha = intercept,
+        beta = bmk_return)
+
+tidier_lm %>% 
   unnest(returns) %>% 
   ggplot(aes(x = bmk_return, y = daily_return, color = cmdty)) +
   geom_point(alpha  = 0.3) +
-  geom_abline(aes(intercept = intercept, slope = beta))+ 
+  geom_abline(aes(intercept = alpha, slope = beta))+ 
+  geom_smooth(method = "lm", linetype = 2, size = 0.5, show.legend = F)+
   facet_wrap(~cmdty)+
   scale_color_manual(values = hc_cols) +
   labs(x = "Benchmark Returns", y = "Commodity Returns")
@@ -258,6 +261,7 @@ tidy_lm %>%
 ```{r}
 
 tidy_lm %>%
+  mutate(term = if_else(term == "bmk_return", "beta", "alpha")) %>% 
   #filter(term == "bmk_return") %>%
   ggplot(aes(estimate, p.value, label = cmdty)) +
   geom_vline(xintercept = 0, lty = 2,
@@ -273,6 +277,7 @@ tidy_lm %>%
 ## CAPM Rolling Window
 
 ```{r echo = FALSE}
+
 sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar')
 cocoaRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cocoa')
 cottonRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cotton')
@@ -320,55 +325,29 @@ legend("bottom", col=hc_cols[1:5], lty=1,
 
 ```{r}
 
-ret_sugar <- cmdty_raw %>% 
-  select('cmdty','daily_return') %>% 
-  filter(cmdty == 'sugar')
-
-ret_cocoa <- cmdty_raw %>% 
-  select('cmdty','daily_return') %>% 
-  filter(cmdty == 'cocoa')
-
-ret_cotton <- cmdty_raw %>% 
-  select('cmdty','daily_return') %>% 
-  filter(cmdty == 'cotton')
-
-ret_coffee <- cmdty_raw %>% 
-  select('cmdty','daily_return') %>% 
-  filter(cmdty == 'coffee')
-
-ret_xbcom <- cmdty_raw %>% 
-  select('cmdty','daily_return') %>% 
-  filter(cmdty == 'xbcom')
-```
-
-
-
-```{r}
-
-# ajuste dos modelos
-tidy_DLM <- returns_tb %>% 
-  mutate(model = map(returns, ~lm(daily_return ~ bmk_return, data = .x)))
-
-
 # set up DLM
-dlmFun <- function(parm,x.mat){
-  parm = exp(parm)
-  return(dlmModReg(X=x.mat, dV=parm[1], dW= c(parm[2],parm[3])) )
+dlm_spec <-  function(parm, x.mat){
+  parm <- exp(parm)
+  return(dlmModReg(X=x.mat, dV=parm[1], dW=c(parm[2], parm[3])))
 }
 
+
 # estimate parameters
-dlmFit <- dlmMLE(y=ret_cocoa$daily_return[-1],
-              parm=c(1,1,1),
-              x.mat=ret_xbcom$daily_return,
-              build=dlmFun,
-              hessian=T)
-```
+tidy_dlm <- returns_tb %>% 
+  unnest(returns) %>% 
+  chop(c(bmk_return, daily_return)) %>% 
+  mutate(model = map2(bmk_return, daily_return, ~dlmMLE(y = .y,
+                                                        parm = c(1,1,1),
+                                                        x.mat = .x,
+                                                        build = dlm_spec,
+                                                        hessian=T)))
 
 
-```{r}
-# get estimates
-se =  sqrt(exp(dlmFit$par))
-se
+# get estimates - verificar aplicação com map
+tidy_dlm %>% 
+  unnest_wider(model) %>% 
+  mutate(se = sqrt(exp(par)))
+
 ```
 
 ## CAPM com modelo de Volatilidade
