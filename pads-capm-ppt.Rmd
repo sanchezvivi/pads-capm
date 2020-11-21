@@ -41,6 +41,7 @@ library(tidymodels)
 library(tidyverse)
 
 library(dlm)
+library(rugarch)
 
 load_rmetrics_calendars(2000:year(Sys.Date())+1)
 #calendars()
@@ -121,6 +122,9 @@ cmdty_raw <- tq_get(tickers, get = "quandl", from = "2018-01-01", to  = Sys.Date
                             period = "daily",
                             method = "log",
                             col_rename = "daily_return") %>% 
+                  tq_mutate(select = settle,
+                            mutate_fun = volatility,
+                            col_rename = "hist_vol") %>%
             mutate(acc_return = exp(cumsum(daily_return))-1,
                     sq_return = daily_return^2) %>% 
             ungroup()
@@ -169,7 +173,7 @@ cmdty_raw %>%
 ```
 
 
-## Retornos Acumulado
+## Retorno Acumulado
 
 ```{r Grafico3 - Retornos}
 
@@ -190,10 +194,11 @@ cmdty_raw %>%
 
 ```{r}
 
-cmdty_raw %>% 
-      mutate(sq_return = sq_return*100) %>% 
+cmdty_raw %>% #group_by(cmdty) %>% summarise(mean(hist_vol, na.rm = T))
+      mutate(sq_return = sq_return *100) %>% 
+      mutate(hist_vol = hist_vol*100) %>% 
       hchart(., "line", 
-             hcaes(x = date, y = sq_return, group = cmdty)) %>% 
+             hcaes(x = date, y = hist_vol, group = cmdty)) %>% 
       #hc_colors(cols) %>%
       hc_tooltip(valueDecimals = 2) %>% 
       hc_xAxis(title = list(text = "Data")) %>% 
@@ -377,6 +382,7 @@ buildCAPM <- function(parm){
   dlmModReg(X=bmk, dV=parm[1], dW=parm[2:3])
 }
 
+<<<<<<< HEAD
 # Estimate the model
 sugarMLE = dlmMLE(y=sugarRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
 cocoaMLE = dlmMLE(y=cocoaRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
@@ -412,12 +418,189 @@ abline(h=estatico$coefficients[1], lty=2)
 
 ts.plot(dropFirst(model_filtered$m[,2]), ylab='',main=expression(beta[t]), lwd=2, col=4)
 abline(h=estatico$coefficients[2], lty=2)
+=======
+se_fun <- function(parameter){
+  
+  se <- sqrt(exp(parameter))
+  
+return(se)
+    
+}
+
+# estimate parameters
+tidy_dlm <- returns_tb %>% 
+  unnest(returns) %>% 
+  chop(c(bmk_return, daily_return)) %>% 
+  mutate(model = map2(bmk_return, daily_return, ~dlmMLE(y = .y,
+                                                        parm = c(1,1,1),
+                                                        x.mat = .x,
+                                                        build = dlm_spec,
+                                                        hessian=T)))
+# get estimates - verificar aplicação com map
+tidy_estimates <- tidy_dlm %>% 
+  unnest_wider(model) %>% #pull(par)
+  mutate(se = map(par, se_fun))
+
+tidy_estimates %>% 
+  select(cmdty, se) %>% 
+  unnest_wider(se) %>% 
+  kable()
+
+# get parameter estimates over time
+# these are the smoothed state values
+  
+```
+
+### Filtered and Smoothed States
+
+```{r}
+
+dates <- cmdty_raw %>% 
+  filter(cmdty != "xbcom") %>%  
+  select(cmdty, date, daily_return) %>% 
+  left_join(cmdty_raw %>%  
+              select(cmdty, date, daily_return) %>% 
+              filter(cmdty == "xbcom") %>% 
+              rename(benchmark = cmdty, 
+                     bmk_return = daily_return), by = "date") %>% 
+  na.omit() %>% 
+  select(cmdty,date) %>% 
+  group_by(cmdty) %>% 
+  chop(date)
+
+tidy_filter <- tidy_estimates %>% 
+  select(cmdty, bmk_return, daily_return, par) %>% 
+  mutate(adj_spec = map2(par, bmk_return, ~dlm_spec(.x, .y))) %>% 
+  mutate(dlm_filter = map2(daily_return, adj_spec, ~dlmFilter(.x,.y))) %>% 
+  mutate(dlm_smooth = map(dlm_filter, dlmSmooth)) %>% 
+  left_join(dates, by = "cmdty") %>% 
+  ungroup()
+  
+
+tidy_smooth <- tidy_filter %>% 
+  unnest_wider(dlm_smooth)
+
+
+  # plot filtered and smoothed states
+date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+plot(date,mod2f$m[,1][-1],xlab="day",ylab= expression(alpha[t]),type="l",main="")
+lines(date,mod2s$s[,1][-1],col=2)
+abline(h=capm_amazon$coef[1],col=3)
+abline(h=1,lty=2)
+
+date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+plot(date,mod2f$m[,2][-1],xlab="day",ylab=expression(beta[t]),type="l",main="")
+lines(date,mod2s$s[,2][-1],col=2)
+abline(h=capm_amazon$coef[2],col=3)
+abline(h=1,lty=2)
+  
+>>>>>>> 1bfc2d3e2e176e2a461cd554fe1ec0d195671d4d
 
 ```
 
+
 ## CAPM com modelo de Volatilidade
 
+### GARCH Fit
+
 ```{r}
+
+garch_var <- function(garch_fit){
+  
+  var <- garch_fit@fit$sigma^2
+  
+  return(var)
+  
+}
+
+garch_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
+                    variance.model = list(model="sGARCH", garchOrder=c(1,1)),
+                    distribution.model = "norm")
+
+tidy_garch <- returns_tb %>% 
+  unnest(returns) %>% 
+  mutate(plus_mkt = daily_return + bmk_return,
+         minus_mkt = daily_return - bmk_return) %>% 
+  select(cmdty, plus_mkt, minus_mkt, bmk_return) %>% 
+  group_by(cmdty) %>% 
+  chop(c(plus_mkt, minus_mkt, bmk_return)) %>% 
+  mutate(garch_plus = map(plus_mkt, ~ugarchfit(garch_spec, .x)),
+         garch_minus = map(minus_mkt, ~ugarchfit(garch_spec, .x)),
+         garch_bmk = map(bmk_return, ~ugarchfit(garch_spec, .x))) %>% 
+  mutate(var_plus = map(garch_plus, garch_var),
+         var_minus = map(garch_minus, garch_var),
+         var_bmk = map(garch_bmk, garch_var)) %>% 
+  left_join(dates, by = "cmdty")
+
+tidy_betas <- tidy_garch %>% 
+  select(cmdty, date, starts_with("var")) %>% 
+  unchop(everything()) %>% 
+  mutate(beta = (var_plus - var_minus)/(4*var_bmk))
+
+```
+
+
+### Time Varyig Betas
+
+```{r}
+
+tidy_betas %>% 
+  ggplot(aes(date, beta, color = cmdty)) +
+  geom_line() +
+  facet_wrap(~cmdty, scales = "free") +
+  scale_color_manual(values = hc_cols) +
+  labs(x = "", y = "Beta")
+
+
+
+```
+
+
+### LAB
+
+```{r}
+spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
+                    variance.model = list(model="sGARCH", garchOrder=c(1,1)),
+                    distribution.model = "norm")
+
+garch_mercado = ugarchfit(spec, data = mercado)
+
+temp1 = itau + mercado
+temp2 = itau - mercado
+
+garch_mais = ugarchfit(spec, data = temp1)
+garch_menos = ugarchfit(spec, data = temp2)
+
+var_mercado = garch_mercado@fit$sigma^2
+var_mais    = garch_mais@fit$sigma^2
+var_menos   = garch_menos@fit$sigma^2
+
+tvp_beta = (var_mais - var_menos)/(4*var_mercado)
+
+ts.plot(tvp_beta, col=1, ylab='Ita?', main='Time-Varying Beta', lwd=1)
+abline(h=itau_fit$coefficients[2], lty=2, lwd=2, col=2)
+
+
+
+# Performance via Backtest
+
+fitted = rep(NA, nrow(itau))
+erro = rep(NA, nrow(itau))
+
+for (t in 1:nrow(itau)){
+  fitted[t] = tvp_beta[t]*mercado[t]
+  erro[t]   = itau[t] - fitted[t] 
+}
+
+MSE_beta_garch = mean(erro^2)
+MAE_beta_garch = mean(abs(erro))
+
+MAE_beta_garch/MAE_itau_estatico
+
+MSE_beta_garch/MSE_itau_estatico
+
+
+# MOdelo com beta variando atrav?s do GARCH performa melhor que o beta est?tico!
 
 
 
