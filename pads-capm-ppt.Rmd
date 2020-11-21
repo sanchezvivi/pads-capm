@@ -451,7 +451,8 @@ tidy_garch <- returns_tb %>%
 tidy_betas <- tidy_garch %>% 
   select(cmdty, date, starts_with("var")) %>% 
   unchop(everything()) %>% 
-  mutate(beta = (var_plus - var_minus)/(4*var_bmk))
+  mutate(tv_beta = (var_plus - var_minus)/(4*var_bmk)) %>% 
+  left_join(select(tidier_lm, cmdty, beta), by = "cmdty")
 
 ```
 
@@ -461,13 +462,12 @@ tidy_betas <- tidy_garch %>%
 ```{r}
 
 tidy_betas %>% 
-  ggplot(aes(date, beta, color = cmdty)) +
+  ggplot(aes(date, tv_beta, color = cmdty)) +
   geom_line() +
+  geom_line(aes(y = beta), linetype = 2, color = "black", size = 0.5) +
   facet_wrap(~cmdty, scales = "free") +
   scale_color_manual(values = hc_cols) +
   labs(x = "", y = "Beta")
-
-
 
 ```
 
