@@ -417,6 +417,8 @@ abline(h=1,lty=2)
 
 ## CAPM com modelo de Volatilidade
 
+### GARCH Fit
+
 ```{r}
 
 garch_var <- function(garch_fit){
@@ -431,31 +433,41 @@ garch_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
                     variance.model = list(model="sGARCH", garchOrder=c(1,1)),
                     distribution.model = "norm")
 
-bmk_returns <- cmdty_raw %>% 
-  filter(cmdty == "xbcom") %>% 
-  pull(daily_return)
-
-garch_bmk <- ugarchfit(garch_spec, data = bmk_returns)
-
-var_bmk <- garch_var(garch_bmk)
-
 tidy_garch <- returns_tb %>% 
   unnest(returns) %>% 
   mutate(plus_mkt = daily_return + bmk_return,
          minus_mkt = daily_return - bmk_return) %>% 
-  select(cmdty, plus_mkt, minus_mkt) %>% 
+  select(cmdty, plus_mkt, minus_mkt, bmk_return) %>% 
   group_by(cmdty) %>% 
-  chop(c(plus_mkt, minus_mkt)) %>% 
+  chop(c(plus_mkt, minus_mkt, bmk_return)) %>% 
   mutate(garch_plus = map(plus_mkt, ~ugarchfit(garch_spec, .x)),
-         garch_minus = map(minus_mkt, ~ugarchfit(garch_spec, .x))) %>% 
+         garch_minus = map(minus_mkt, ~ugarchfit(garch_spec, .x)),
+         garch_bmk = map(bmk_return, ~ugarchfit(garch_spec, .x))) %>% 
   mutate(var_plus = map(garch_plus, garch_var),
-         var_minus = map(garch_minus, garch_var)) %>% 
+         var_minus = map(garch_minus, garch_var),
+         var_bmk = map(garch_bmk, garch_var)) %>% 
   left_join(dates, by = "cmdty")
 
 tidy_betas <- tidy_garch %>% 
-  left_join(dates, by = "cmdty") %>% 
   select(cmdty, date, starts_with("var")) %>% 
-  unchop(c(date, var_plus, var_minus)) %>% 
+  unchop(everything()) %>% 
+  mutate(beta = (var_plus - var_minus)/(4*var_bmk))
+
+```
+
+
+### Time Varyig Betas
+
+```{r}
+
+tidy_betas %>% 
+  ggplot(aes(date, beta, color = cmdty)) +
+  geom_line() +
+  facet_wrap(~cmdty, scales = "free") +
+  scale_color_manual(values = hc_cols) +
+  labs(x = "", y = "Beta")
+
+
 
 ```
 
