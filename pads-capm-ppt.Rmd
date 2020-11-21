@@ -209,7 +209,7 @@ cmdty_raw %>% #group_by(cmdty) %>% summarise(mean(hist_vol, na.rm = T))
 
 # CAPM 
 
-## CAPM Estático
+## Estático
 
 ```{r echo = FALSE}
 
@@ -240,7 +240,7 @@ tidy_lm <- tidy_capm %>%
 
 ```
 
-## Resultados
+### Resultados
 
 ```{r echo = FALSE}
 
@@ -279,7 +279,7 @@ tidy_lm %>%
 
 ```
 
-## CAPM Rolling Window
+## Rolling Window
 
 ```{r echo = FALSE}
 
@@ -326,7 +326,7 @@ legend("bottom", col=hc_cols[1:5], lty=1,
 
 ```
 
-## CAPM Dinâmico
+## Dinâmico
 
 ```{r}
 
@@ -415,9 +415,9 @@ abline(h=1,lty=2)
 ```
 
 
-## CAPM com modelo de Volatilidade
+## GARCH
 
-### GARCH Fit
+### Fit
 
 ```{r}
 
@@ -437,9 +437,9 @@ tidy_garch <- returns_tb %>%
   unnest(returns) %>% 
   mutate(plus_mkt = daily_return + bmk_return,
          minus_mkt = daily_return - bmk_return) %>% 
-  select(cmdty, plus_mkt, minus_mkt, bmk_return) %>% 
+  select(-benchmark) %>% 
   group_by(cmdty) %>% 
-  chop(c(plus_mkt, minus_mkt, bmk_return)) %>% 
+  chop(-cmdty) %>% 
   mutate(garch_plus = map(plus_mkt, ~ugarchfit(garch_spec, .x)),
          garch_minus = map(minus_mkt, ~ugarchfit(garch_spec, .x)),
          garch_bmk = map(bmk_return, ~ugarchfit(garch_spec, .x))) %>% 
@@ -449,10 +449,19 @@ tidy_garch <- returns_tb %>%
   left_join(dates, by = "cmdty")
 
 tidy_betas <- tidy_garch %>% 
-  select(cmdty, date, starts_with("var")) %>% 
+  select(-starts_with("garch")) %>% 
   unchop(everything()) %>% 
-  mutate(tv_beta = (var_plus - var_minus)/(4*var_bmk)) %>% 
+  mutate(tv_beta = (var_plus - var_minus)/(4*var_bmk),
+         fitted = tv_beta*bmk_return ,
+         erro = daily_return-fitted,
+         mse = mean(erro^2),
+         mae = mean(abs(erro))) %>% 
   left_join(select(tidier_lm, cmdty, beta), by = "cmdty")
+
+
+#MAE_beta_garch/MAE_itau_estatico
+
+#MSE_beta_garch/MSE_itau_estatico
 
 ```
 
@@ -472,56 +481,8 @@ tidy_betas %>%
 ```
 
 
-### LAB
+# Conclusão
 
-```{r}
-spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
-                    variance.model = list(model="sGARCH", garchOrder=c(1,1)),
-                    distribution.model = "norm")
-
-garch_mercado = ugarchfit(spec, data = mercado)
-
-temp1 = itau + mercado
-temp2 = itau - mercado
-
-garch_mais = ugarchfit(spec, data = temp1)
-garch_menos = ugarchfit(spec, data = temp2)
-
-var_mercado = garch_mercado@fit$sigma^2
-var_mais    = garch_mais@fit$sigma^2
-var_menos   = garch_menos@fit$sigma^2
-
-tvp_beta = (var_mais - var_menos)/(4*var_mercado)
-
-ts.plot(tvp_beta, col=1, ylab='Ita?', main='Time-Varying Beta', lwd=1)
-abline(h=itau_fit$coefficients[2], lty=2, lwd=2, col=2)
-
-
-
-# Performance via Backtest
-
-fitted = rep(NA, nrow(itau))
-erro = rep(NA, nrow(itau))
-
-for (t in 1:nrow(itau)){
-  fitted[t] = tvp_beta[t]*mercado[t]
-  erro[t]   = itau[t] - fitted[t] 
-}
-
-MSE_beta_garch = mean(erro^2)
-MAE_beta_garch = mean(abs(erro))
-
-MAE_beta_garch/MAE_itau_estatico
-
-MSE_beta_garch/MSE_itau_estatico
-
-
-# MOdelo com beta variando atrav?s do GARCH performa melhor que o beta est?tico!
-
-
-
-
-```
 
 
 # Referências
