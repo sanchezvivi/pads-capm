@@ -296,17 +296,17 @@ wf <- (nPer - w0)
 ```{r echo = FALSE}
 rBetas <- matrix(NA, wf, 5)
 for (t in 1:wf){
-  sugar_fit = lm(sugarRets$daily_return[t:(w0+t)] ~ sugarRets$bmk_return[t:(w0+t)])
-  cocoa_fit = lm(cocoaRets$daily_return[t:(w0+t)] ~ cocoaRets$bmk_return[t:(w0+t)])
-  cotton_fit = lm(cottonRets$daily_return[t:(w0+t)] ~ cottonRets$bmk_return[t:(w0+t)])
-  coffee_fit = lm(coffeeRets$daily_return[t:(w0+t)] ~ coffeeRets$bmk_return[t:(w0+t)])
-  orange_fit = lm(orangeRets$daily_return[t:(w0+t)] ~ orangeRets$bmk_return[t:(w0+t)])
+  sugar_rfit = lm(sugarRets$daily_return[t:(w0+t)] ~ sugarRets$bmk_return[t:(w0+t)])
+  cocoa_rfit = lm(cocoaRets$daily_return[t:(w0+t)] ~ cocoaRets$bmk_return[t:(w0+t)])
+  cotton_rfit = lm(cottonRets$daily_return[t:(w0+t)] ~ cottonRets$bmk_return[t:(w0+t)])
+  coffee_rfit = lm(coffeeRets$daily_return[t:(w0+t)] ~ coffeeRets$bmk_return[t:(w0+t)])
+  orange_rfit = lm(orangeRets$daily_return[t:(w0+t)] ~ orangeRets$bmk_return[t:(w0+t)])
 
-  rBetas[t,]= c(sugar_fit$coefficients[2],
-               cocoa_fit$coefficients[2],
-               cotton_fit$coefficients[2],
-               coffee_fit$coefficients[2],
-               orange_fit$coefficients[2])
+  rBetas[t,]= c(sugar_rfit$coefficients[2],
+               cocoa_rfit$coefficients[2],
+               cotton_rfit$coefficients[2],
+               coffee_rfit$coefficients[2],
+               orange_rfit$coefficients[2])
 }
 
 sBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
@@ -332,21 +332,21 @@ legend("bottom", col=hc_cols[1:5], lty=1,
 
 eBetas <- matrix(NA, wf, 5)
 for (t in 1:wf){
-  sugar_fit = lm(sugarRets$daily_return[1:(w0+t)] ~ sugarRets$bmk_return[1:(w0+t)])
-  cocoa_fit = lm(cocoaRets$daily_return[1:(w0+t)] ~ cocoaRets$bmk_return[1:(w0+t)])
-  cotton_fit = lm(cottonRets$daily_return[1:(w0+t)] ~ cottonRets$bmk_return[1:(w0+t)])
-  coffee_fit = lm(coffeeRets$daily_return[1:(w0+t)] ~ coffeeRets$bmk_return[1:(w0+t)])
-  orange_fit = lm(orangeRets$daily_return[1:(w0+t)] ~ orangeRets$bmk_return[1:(w0+t)])
+  sugar_efit = lm(sugarRets$daily_return[1:(w0+t)] ~ sugarRets$bmk_return[1:(w0+t)])
+  cocoa_efit = lm(cocoaRets$daily_return[1:(w0+t)] ~ cocoaRets$bmk_return[1:(w0+t)])
+  cotton_efit = lm(cottonRets$daily_return[1:(w0+t)] ~ cottonRets$bmk_return[1:(w0+t)])
+  coffee_efit = lm(coffeeRets$daily_return[1:(w0+t)] ~ coffeeRets$bmk_return[1:(w0+t)])
+  orange_efit = lm(orangeRets$daily_return[1:(w0+t)] ~ orangeRets$bmk_return[1:(w0+t)])
 
-  eBetas[t,]= c(sugar_fit$coefficients[2],
-               cocoa_fit$coefficients[2],
-               cotton_fit$coefficients[2],
-               coffee_fit$coefficients[2],
-               orange_fit$coefficients[2])
+  eBetas[t,]= c(sugar_efit$coefficients[2],
+               cocoa_efit$coefficients[2],
+               cotton_efit$coefficients[2],
+               coffee_efit$coefficients[2],
+               orange_efit$coefficients[2])
 }
 
-eBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
-ts.plot(rBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Rolling Betas')
+sBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
+ts.plot(eBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Rolling Betas')
 abline(h=filter(sBetas, cmdty == 'sugar')[2], col=hc_cols[1], lty=2)
 abline(h=filter(sBetas, cmdty == 'cocoa')[2], col=hc_cols[2], lty=2)
 abline(h=filter(sBetas, cmdty == 'cotton')[2], col=hc_cols[3], lty=2)
@@ -365,29 +365,53 @@ legend("bottom", col=hc_cols[1:5], lty=1,
 ## CAPM Dynamic Linear Models (DLM)
 
 ```{r}
+# Estático
+estatico = lm(itau ~ ibov)
 
-# set up DLM
-dlm_spec <-  function(parm, x.mat){
+parm = c(0,0,0)
+bmk <- sugarRets$bmk_return
+
+# function to build Time Varying Parameter state space model
+buildCAPM <- function(parm){
   parm <- exp(parm)
-  return(dlmModReg(X=x.mat, dV=parm[1], dW=c(parm[2], parm[3])))
+  dlmModReg(X=bmk, dV=parm[1], dW=parm[2:3])
 }
 
+# Estimate the model
+sugarMLE = dlmMLE(y=sugarRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+cocoaMLE = dlmMLE(y=cocoaRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+cottonMLE = dlmMLE(y=cottonRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+coffeeMLE = dlmMLE(y=coffeeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+orangeMLE = dlmMLE(y=orangeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
 
-# estimate parameters
-tidy_dlm <- returns_tb %>% 
-  unnest(returns) %>% 
-  chop(c(bmk_return, daily_return)) %>% 
-  mutate(model = map2(bmk_return, daily_return, ~dlmMLE(y = .y,
-                                                        parm = c(1,1,1),
-                                                        x.mat = .x,
-                                                        build = dlm_spec,
-                                                        hessian=T)))
+sugarModel <- buildCAPM(sugarMLE$par)
+cocoaModel <- buildCAPM(cocoaMLE$par)
+cottonModel <- buildCAPM(cottonMLE$par)
+coffeeModel <- buildCAPM(coffeeMLE$par)
+orangeModel <- buildCAPM(retMLE$par)
 
+sugarFilter <- dlmFilter(sugarRets$daily_return, sugarModel)
+cocoaFilter <- dlmFilter(cocoaRets$daily_return, cocoaModel)
+cottonFilter <- dlmFilter(cottonRets$daily_return, cottonModel)
+coffeeFilter <- dlmFilter(coffeeRets$daily_return, coffeeModel)
+orangeFilter <- dlmFilter(orangeRets$daily_return, orangeModel)
 
-# get estimates - verificar aplicação com map
-tidy_dlm %>% 
-  unnest_wider(model) %>% 
-  mutate(se = sqrt(exp(par)))
+sugarFilter$m
+
+sugarSmooth <- dlmSmooth(sugarRets$daily_return, sugarModel)
+cocoaSmooth <- dlmSmooth(cocoaRets$daily_return, cocoaModel)
+cottonSmooth <- dlmSmooth(cottonRets$daily_return, cottonModel)
+coffeeSmooth <- dlmSmooth(coffeeRets$daily_return, coffeeModel)
+orangeSmooth <- dlmSmooth(orangeRets$daily_return, orangeModel)
+
+sugarSmooth$m
+
+par(mfrow=c(1,1))
+ts.plot(dropFirst(model_filtered$m[,1]), ylab='', main=expression(alpha[t]),lwd=2, col=2)
+abline(h=estatico$coefficients[1], lty=2)
+
+ts.plot(dropFirst(model_filtered$m[,2]), ylab='',main=expression(beta[t]), lwd=2, col=4)
+abline(h=estatico$coefficients[2], lty=2)
 
 ```
 
