@@ -121,6 +121,9 @@ cmdty_raw <- tq_get(tickers, get = "quandl", from = "2018-01-01", to  = Sys.Date
                             period = "daily",
                             method = "log",
                             col_rename = "daily_return") %>% 
+                  tq_mutate(select = settle,
+                            mutate_fun = volatility,
+                            col_rename = "hist_vol") %>%
             mutate(acc_return = exp(cumsum(daily_return))-1,
                     sq_return = daily_return^2) %>% 
             ungroup()
@@ -169,7 +172,7 @@ cmdty_raw %>%
 ```
 
 
-## Retornos Acumulado
+## Retorno Acumulado
 
 ```{r Grafico3 - Retornos}
 
@@ -190,10 +193,11 @@ cmdty_raw %>%
 
 ```{r}
 
-cmdty_raw %>% 
-      mutate(sq_return = sq_return*100) %>% 
+cmdty_raw %>% #group_by(cmdty) %>% summarise(mean(hist_vol, na.rm = T))
+      mutate(sq_return = sq_return *100) %>% 
+      mutate(hist_vol = hist_vol*100) %>% 
       hchart(., "line", 
-             hcaes(x = date, y = sq_return, group = cmdty)) %>% 
+             hcaes(x = date, y = hist_vol, group = cmdty)) %>% 
       #hc_colors(cols) %>%
       hc_tooltip(valueDecimals = 2) %>% 
       hc_xAxis(title = list(text = "Data")) %>% 
@@ -331,6 +335,13 @@ dlm_spec <-  function(parm, x.mat){
   return(dlmModReg(X=x.mat, dV=parm[1], dW=c(parm[2], parm[3])))
 }
 
+se_fun <- function(parameter){
+  
+  se <- sqrt(exp(parameter))
+  
+return(se)
+    
+}
 
 # estimate parameters
 tidy_dlm <- returns_tb %>% 
@@ -341,14 +352,32 @@ tidy_dlm <- returns_tb %>%
                                                         x.mat = .x,
                                                         build = dlm_spec,
                                                         hessian=T)))
-
-
 # get estimates - verificar aplicação com map
-tidy_dlm %>% 
-  unnest_wider(model) %>% 
-  mutate(se = sqrt(exp(par)))
+tidy_estimates <- tidy_dlm %>% 
+  unnest_wider(model) %>% #pull(par)
+  mutate(se = map(par, se_fun))
 
+tidy_estimates %>% 
+  select(cmdty, se) %>% 
+  unnest_wider(se)
+
+# get parameter estimates over time
+# these are the smoothed state values
+mod2  <-  dlm2(fit2$par, ret_sp500$ret.closing.prices)
+mod2f <-  dlmFilter(ret_amazon$ret.closing.prices, mod2)
+mod2s <-  dlmSmooth(mod2f)
+
+
+tidy_filter <- tidy_estimates %>% 
+  select(cmdty, bmk_return, daily_return, par) %>% 
+  mutate(adj_spec = map2(par, bmk_return, ~dlm_spec(.x, .y))) %>% 
+  mutate(dlm_filter = map2(daily_return, adj_spec, ~dlmFilter(.x,.y))) %>% 
+  mutate(smooth = map(dlm_filter, ~dlmSmooth)) #executar função fun
+
+  
 ```
+
+
 
 ## CAPM com modelo de Volatilidade
 
