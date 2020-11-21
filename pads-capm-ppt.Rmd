@@ -279,11 +279,7 @@ tidy_lm %>%
 
 ```
 
-<<<<<<< HEAD
-## Rolling Window
-=======
-## CAPM Dynamic Windows
->>>>>>> 860c187125e089b04078fb1c45c15c445d7f94da
+##  Dynamic Windows
 
 ### Preparação da base e definição das janelas.
 ```{r echo = FALSE}
@@ -300,7 +296,7 @@ w0 <- round(nPer/nDiv, 0)
 wf <- (nPer - w0)
 ```
 
-## CAPM Rolling Window
+### CAPM Rolling Window
 
 ```{r echo = FALSE}
 rBetas <- matrix(NA, wf, 5)
@@ -335,10 +331,8 @@ legend("bottom", col=hc_cols[1:5], lty=1,
 
 ```
 
-<<<<<<< HEAD
-## Dinâmico
-=======
-## CAPM Expanding Window
+
+##  Expanding Window
 
 ```{r echo = FALSE}
 
@@ -374,8 +368,7 @@ legend("bottom", col=hc_cols[1:5], lty=1,
 
 ```
 
-## CAPM Dynamic Linear Models (DLM)
->>>>>>> 860c187125e089b04078fb1c45c15c445d7f94da
+## Dinâmico 
 
 ```{r}
 # Estático
@@ -390,7 +383,6 @@ buildCAPM <- function(parm){
   dlmModReg(X=bmk, dV=parm[1], dW=parm[2:3])
 }
 
-<<<<<<< HEAD
 # Estimate the model
 sugarMLE = dlmMLE(y=sugarRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
 cocoaMLE = dlmMLE(y=cocoaRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
@@ -426,7 +418,12 @@ abline(h=estatico$coefficients[1], lty=2)
 
 ts.plot(dropFirst(model_filtered$m[,2]), ylab='',main=expression(beta[t]), lwd=2, col=4)
 abline(h=estatico$coefficients[2], lty=2)
-=======
+
+```
+
+### Tidy DLM
+
+```{r}
 se_fun <- function(parameter){
   
   se <- sqrt(exp(parameter))
@@ -502,8 +499,6 @@ lines(date,mod2s$s[,2][-1],col=2)
 abline(h=capm_amazon$coef[2],col=3)
 abline(h=1,lty=2)
   
->>>>>>> 1bfc2d3e2e176e2a461cd554fe1ec0d195671d4d
-
 ```
 
 
