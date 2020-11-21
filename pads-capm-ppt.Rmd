@@ -41,6 +41,7 @@ library(tidymodels)
 library(tidyverse)
 
 library(dlm)
+library(rugarch)
 
 load_rmetrics_calendars(2000:year(Sys.Date())+1)
 #calendars()
@@ -359,29 +360,151 @@ tidy_estimates <- tidy_dlm %>%
 
 tidy_estimates %>% 
   select(cmdty, se) %>% 
-  unnest_wider(se)
+  unnest_wider(se) %>% 
+  kable()
 
 # get parameter estimates over time
 # these are the smoothed state values
-mod2  <-  dlm2(fit2$par, ret_sp500$ret.closing.prices)
-mod2f <-  dlmFilter(ret_amazon$ret.closing.prices, mod2)
-mod2s <-  dlmSmooth(mod2f)
+  
+```
 
+### Filtered and Smoothed States
+
+```{r}
+
+dates <- cmdty_raw %>% 
+  filter(cmdty != "xbcom") %>%  
+  select(cmdty, date, daily_return) %>% 
+  left_join(cmdty_raw %>%  
+              select(cmdty, date, daily_return) %>% 
+              filter(cmdty == "xbcom") %>% 
+              rename(benchmark = cmdty, 
+                     bmk_return = daily_return), by = "date") %>% 
+  na.omit() %>% 
+  select(cmdty,date) %>% 
+  group_by(cmdty) %>% 
+  chop(date)
 
 tidy_filter <- tidy_estimates %>% 
   select(cmdty, bmk_return, daily_return, par) %>% 
   mutate(adj_spec = map2(par, bmk_return, ~dlm_spec(.x, .y))) %>% 
   mutate(dlm_filter = map2(daily_return, adj_spec, ~dlmFilter(.x,.y))) %>% 
-  mutate(smooth = map(dlm_filter, ~dlmSmooth)) #executar função fun
-
+  mutate(dlm_smooth = map(dlm_filter, dlmSmooth)) %>% 
+  left_join(dates, by = "cmdty") %>% 
+  ungroup()
   
-```
 
+tidy_smooth <- tidy_filter %>% 
+  unnest_wider(dlm_smooth)
+
+
+  # plot filtered and smoothed states
+date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+plot(date,mod2f$m[,1][-1],xlab="day",ylab= expression(alpha[t]),type="l",main="")
+lines(date,mod2s$s[,1][-1],col=2)
+abline(h=capm_amazon$coef[1],col=3)
+abline(h=1,lty=2)
+
+date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+plot(date,mod2f$m[,2][-1],xlab="day",ylab=expression(beta[t]),type="l",main="")
+lines(date,mod2s$s[,2][-1],col=2)
+abline(h=capm_amazon$coef[2],col=3)
+abline(h=1,lty=2)
+  
+
+```
 
 
 ## CAPM com modelo de Volatilidade
 
 ```{r}
+
+garch_var <- function(garch_fit){
+  
+  var <- garch_fit@fit$sigma^2
+  
+  return(var)
+  
+}
+
+garch_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
+                    variance.model = list(model="sGARCH", garchOrder=c(1,1)),
+                    distribution.model = "norm")
+
+bmk_returns <- cmdty_raw %>% 
+  filter(cmdty == "xbcom") %>% 
+  pull(daily_return)
+
+garch_bmk <- ugarchfit(garch_spec, data = bmk_returns)
+
+var_bmk <- garch_var(garch_bmk)
+
+tidy_garch <- returns_tb %>% 
+  unnest(returns) %>% 
+  mutate(plus_mkt = daily_return + bmk_return,
+         minus_mkt = daily_return - bmk_return) %>% 
+  select(cmdty, plus_mkt, minus_mkt) %>% 
+  group_by(cmdty) %>% 
+  chop(c(plus_mkt, minus_mkt)) %>% 
+  mutate(garch_plus = map(plus_mkt, ~ugarchfit(garch_spec, .x)),
+         garch_minus = map(minus_mkt, ~ugarchfit(garch_spec, .x))) %>% 
+  mutate(var_plus = map(garch_plus, garch_var),
+         var_minus = map(garch_minus, garch_var)) %>% 
+  left_join(dates, by = "cmdty")
+
+tidy_betas <- tidy_garch %>% 
+  left_join(dates, by = "cmdty") %>% 
+  select(cmdty, date, starts_with("var")) %>% 
+  unchop(c(date, var_plus, var_minus)) %>% 
+
+```
+
+
+### LAB
+
+```{r}
+spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
+                    variance.model = list(model="sGARCH", garchOrder=c(1,1)),
+                    distribution.model = "norm")
+
+garch_mercado = ugarchfit(spec, data = mercado)
+
+temp1 = itau + mercado
+temp2 = itau - mercado
+
+garch_mais = ugarchfit(spec, data = temp1)
+garch_menos = ugarchfit(spec, data = temp2)
+
+var_mercado = garch_mercado@fit$sigma^2
+var_mais    = garch_mais@fit$sigma^2
+var_menos   = garch_menos@fit$sigma^2
+
+tvp_beta = (var_mais - var_menos)/(4*var_mercado)
+
+ts.plot(tvp_beta, col=1, ylab='Ita?', main='Time-Varying Beta', lwd=1)
+abline(h=itau_fit$coefficients[2], lty=2, lwd=2, col=2)
+
+
+
+# Performance via Backtest
+
+fitted = rep(NA, nrow(itau))
+erro = rep(NA, nrow(itau))
+
+for (t in 1:nrow(itau)){
+  fitted[t] = tvp_beta[t]*mercado[t]
+  erro[t]   = itau[t] - fitted[t] 
+}
+
+MSE_beta_garch = mean(erro^2)
+MAE_beta_garch = mean(abs(erro))
+
+MAE_beta_garch/MAE_itau_estatico
+
+MSE_beta_garch/MSE_itau_estatico
+
+
+# MOdelo com beta variando atrav?s do GARCH performa melhor que o beta est?tico!
 
 
 
