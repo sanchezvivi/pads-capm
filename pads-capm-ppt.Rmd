@@ -279,8 +279,13 @@ tidy_lm %>%
 
 ```
 
+<<<<<<< HEAD
 ## Rolling Window
+=======
+## CAPM Dynamic Windows
+>>>>>>> 860c187125e089b04078fb1c45c15c445d7f94da
 
+### Preparação da base e definição das janelas.
 ```{r echo = FALSE}
 
 sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar')
@@ -293,20 +298,24 @@ nPer <- nrow(sugarRets)
 nDiv <- 2
 w0 <- round(nPer/nDiv, 0)
 wf <- (nPer - w0)
+```
 
+## CAPM Rolling Window
+
+```{r echo = FALSE}
 rBetas <- matrix(NA, wf, 5)
 for (t in 1:wf){
-  sugar_fit = lm(sugarRets$daily_return[t:(w0+t)] ~ sugarRets$bmk_return[t:(w0+t)])
-  cocoa_fit = lm(cocoaRets$daily_return[t:(w0+t)] ~ cocoaRets$bmk_return[t:(w0+t)])
-  cotton_fit = lm(cottonRets$daily_return[t:(w0+t)] ~ cottonRets$bmk_return[t:(w0+t)])
-  coffee_fit = lm(coffeeRets$daily_return[t:(w0+t)] ~ coffeeRets$bmk_return[t:(w0+t)])
-  orange_fit = lm(orangeRets$daily_return[t:(w0+t)] ~ orangeRets$bmk_return[t:(w0+t)])
+  sugar_rfit = lm(sugarRets$daily_return[t:(w0+t)] ~ sugarRets$bmk_return[t:(w0+t)])
+  cocoa_rfit = lm(cocoaRets$daily_return[t:(w0+t)] ~ cocoaRets$bmk_return[t:(w0+t)])
+  cotton_rfit = lm(cottonRets$daily_return[t:(w0+t)] ~ cottonRets$bmk_return[t:(w0+t)])
+  coffee_rfit = lm(coffeeRets$daily_return[t:(w0+t)] ~ coffeeRets$bmk_return[t:(w0+t)])
+  orange_rfit = lm(orangeRets$daily_return[t:(w0+t)] ~ orangeRets$bmk_return[t:(w0+t)])
 
-  rBetas[t,]= c(sugar_fit$coefficients[2],
-               cocoa_fit$coefficients[2],
-               cotton_fit$coefficients[2],
-               coffee_fit$coefficients[2],
-               orange_fit$coefficients[2])
+  rBetas[t,]= c(sugar_rfit$coefficients[2],
+               cocoa_rfit$coefficients[2],
+               cotton_rfit$coefficients[2],
+               coffee_rfit$coefficients[2],
+               orange_rfit$coefficients[2])
 }
 
 sBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
@@ -326,16 +335,98 @@ legend("bottom", col=hc_cols[1:5], lty=1,
 
 ```
 
+<<<<<<< HEAD
 ## Dinâmico
+=======
+## CAPM Expanding Window
 
-```{r}
+```{r echo = FALSE}
 
-# set up DLM
-dlm_spec <-  function(parm, x.mat){
-  parm <- exp(parm)
-  return(dlmModReg(X=x.mat, dV=parm[1], dW=c(parm[2], parm[3])))
+eBetas <- matrix(NA, wf, 5)
+for (t in 1:wf){
+  sugar_efit = lm(sugarRets$daily_return[1:(w0+t)] ~ sugarRets$bmk_return[1:(w0+t)])
+  cocoa_efit = lm(cocoaRets$daily_return[1:(w0+t)] ~ cocoaRets$bmk_return[1:(w0+t)])
+  cotton_efit = lm(cottonRets$daily_return[1:(w0+t)] ~ cottonRets$bmk_return[1:(w0+t)])
+  coffee_efit = lm(coffeeRets$daily_return[1:(w0+t)] ~ coffeeRets$bmk_return[1:(w0+t)])
+  orange_efit = lm(orangeRets$daily_return[1:(w0+t)] ~ orangeRets$bmk_return[1:(w0+t)])
+
+  eBetas[t,]= c(sugar_efit$coefficients[2],
+               cocoa_efit$coefficients[2],
+               cotton_efit$coefficients[2],
+               coffee_efit$coefficients[2],
+               orange_efit$coefficients[2])
 }
 
+sBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
+ts.plot(eBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Rolling Betas')
+abline(h=filter(sBetas, cmdty == 'sugar')[2], col=hc_cols[1], lty=2)
+abline(h=filter(sBetas, cmdty == 'cocoa')[2], col=hc_cols[2], lty=2)
+abline(h=filter(sBetas, cmdty == 'cotton')[2], col=hc_cols[3], lty=2)
+abline(h=filter(sBetas, cmdty == 'coffee')[2], col=hc_cols[4], lty=2)
+abline(h=filter(sBetas, cmdty == 'orange_juice')[2], col=hc_cols[5], lty=2)
+abline(h=1, col=hc_cols[6], lty=1)
+legend("bottom", col=hc_cols[1:5], lty=1,
+       legend=cmdty_name[1:5],
+       lwd = 2, cex=0.6, box.lty=2)
+
+
+
+
+```
+
+## CAPM Dynamic Linear Models (DLM)
+>>>>>>> 860c187125e089b04078fb1c45c15c445d7f94da
+
+```{r}
+# Estático
+estatico = lm(itau ~ ibov)
+
+parm = c(0,0,0)
+bmk <- sugarRets$bmk_return
+
+# function to build Time Varying Parameter state space model
+buildCAPM <- function(parm){
+  parm <- exp(parm)
+  dlmModReg(X=bmk, dV=parm[1], dW=parm[2:3])
+}
+
+<<<<<<< HEAD
+# Estimate the model
+sugarMLE = dlmMLE(y=sugarRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+cocoaMLE = dlmMLE(y=cocoaRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+cottonMLE = dlmMLE(y=cottonRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+coffeeMLE = dlmMLE(y=coffeeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+orangeMLE = dlmMLE(y=orangeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+
+sugarModel <- buildCAPM(sugarMLE$par)
+cocoaModel <- buildCAPM(cocoaMLE$par)
+cottonModel <- buildCAPM(cottonMLE$par)
+coffeeModel <- buildCAPM(coffeeMLE$par)
+orangeModel <- buildCAPM(retMLE$par)
+
+sugarFilter <- dlmFilter(sugarRets$daily_return, sugarModel)
+cocoaFilter <- dlmFilter(cocoaRets$daily_return, cocoaModel)
+cottonFilter <- dlmFilter(cottonRets$daily_return, cottonModel)
+coffeeFilter <- dlmFilter(coffeeRets$daily_return, coffeeModel)
+orangeFilter <- dlmFilter(orangeRets$daily_return, orangeModel)
+
+sugarFilter$m
+
+sugarSmooth <- dlmSmooth(sugarRets$daily_return, sugarModel)
+cocoaSmooth <- dlmSmooth(cocoaRets$daily_return, cocoaModel)
+cottonSmooth <- dlmSmooth(cottonRets$daily_return, cottonModel)
+coffeeSmooth <- dlmSmooth(coffeeRets$daily_return, coffeeModel)
+orangeSmooth <- dlmSmooth(orangeRets$daily_return, orangeModel)
+
+sugarSmooth$m
+
+par(mfrow=c(1,1))
+ts.plot(dropFirst(model_filtered$m[,1]), ylab='', main=expression(alpha[t]),lwd=2, col=2)
+abline(h=estatico$coefficients[1], lty=2)
+
+ts.plot(dropFirst(model_filtered$m[,2]), ylab='',main=expression(beta[t]), lwd=2, col=4)
+abline(h=estatico$coefficients[2], lty=2)
+=======
 se_fun <- function(parameter){
   
   se <- sqrt(exp(parameter))
@@ -411,6 +502,7 @@ lines(date,mod2s$s[,2][-1],col=2)
 abline(h=capm_amazon$coef[2],col=3)
 abline(h=1,lty=2)
   
+>>>>>>> 1bfc2d3e2e176e2a461cd554fe1ec0d195671d4d
 
 ```
 
