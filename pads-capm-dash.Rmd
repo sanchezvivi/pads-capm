@@ -1,0 +1,917 @@
+---
+title: "Modelos Dinâmicos em Soft Commodities"
+author: "Luis Fechio, Viviane Sanchez"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    theme: lumen
+runtime: shiny
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+
+#knitr::opts_chunk$set(
+#  fig.showtext = TRUE,
+#  fig.width = 16, 
+#  fig.height = 8, 
+#  dpi = 300
+#)
+
+library(RcppRoll)
+library(bizdays)
+library(derivmkts)
+
+library(ggrepel)
+library(highcharter)
+library(shiny)
+library(flexdashboard)
+library(knitr)
+library(skimr)
+
+library(timetk)
+
+library(tidyquant)
+library(tidymodels)
+library(tidyverse)
+
+library(dlm)
+library(rugarch)
+
+#library(conflicted)
+#
+#
+#conflict_prefer("filter", "dplyr")
+#conflict_prefer("mutate", "dplyr")
+#conflict_prefer("arrange", "dplyr")
+#conflict_prefer("pivot_longer", "dplyr")
+#conflict_prefer("starts_with", "dplyr")
+#conflict_prefer("select", "dplyr")
+
+load_rmetrics_calendars(2000:year(Sys.Date())+1)
+#calendars()
+bizdays.options$set(default.calendar='Rmetrics/NYSE')
+
+theme_set(theme_minimal())
+theme_update(text = element_text(family = "Open Sans", size = 18),
+             plot.title = element_text(face = "bold", size = 23,
+                                       color = "#1d3752"),
+             legend.position = "bottom")
+
+hc_cols <- c("#7cb5ec", "#434348", "#90ed7d", "#f7a35c", 
+             "#8085e9", "#f15c80", "#e4d354", "#2b908f", 
+             "#f45b5b", "#91e8e1")
+
+options(digits=6)
+
+quandl_api_key(Sys.getenv("QUANDL_TOKEN"))
+
+#- como colocar o token no ambiente:
+#
+#abra o ambiente com o comando
+#`usethis::edit_r_environ()`
+#
+# copie a linha abaixo com seu token
+#
+#QUANDL_TOKEN=(token)
+
+```
+
+```{r global, message=FALSE, warning=FALSE, cache=FALSE, context="data", include=FALSE}
+
+cmdty_name <- c("sugar","cocoa","cotton","coffee", "orange_juice", "xbcom")
+
+tickers <-  c("CHRIS/ICE_SB1", "CHRIS/ICE_CC1", 
+              "CHRIS/ICE_CT1","CHRIS/ICE_KC1", 
+              "CHRIS/ICE_OJ1", "CHRIS/CME_AW1")
+
+cmdty_raw <- tq_get(tickers, get = "quandl", from = "2018-01-01", to  = Sys.Date()) %>% 
+              #na.omit() %>% 
+  left_join(tibble(cmdty = cmdty_name,
+                   symbol = tickers), by = "symbol") %>% 
+            group_by(symbol) %>% 
+                   tq_mutate(select = settle,
+                            mutate_fun = periodReturn,
+                            period = "daily",
+                            method = "log",
+                            col_rename = "daily_return") %>% 
+                  tq_mutate(select = settle,
+                            mutate_fun = volatility,
+                            col_rename = "hist_vol") %>%
+            mutate(acc_return = exp(cumsum(daily_return))-1,
+                    sq_return = daily_return^2) %>% 
+            ungroup()
+  
+
+#cmdty_raw %>% 
+ # glimpse
+
+conv_tb <- tibble(cmdty =  c("sugar","cocoa","cotton","coffee", "orange_juice"),
+                  contract_size = c(112000, 10, 50000, 37500, 15000),
+                  unit = c("lb", "lb", "lb","t","lb"),
+                  tick_size = c(0.01, 1, 0.01, 0.05, 0.05))
+
+
+prices <- cmdty_raw %>% 
+  filter(date == max(date)) %>% 
+  select(cmdty, settle)
+
+```
+
+
+Introdução
+================================
+
+Modelagem dinâmica dos preços das commodities softs listadas na [Intercontinental Exchange (ICE)](https://www.theice.com/products/Futures-Options/Agriculture)
+
+- Açúcar VHP - `sugar`
+- Cacau - `cocoa`
+- Algodão - `cotton`
+- Café - `coffee`
+- Suco de laranja congelado - `orange_juice`
+
+
+- [BCOM](https://www.bloomberg.com/company/press/bloomberg-commodity-index-2020-target-weights-announced/)
+
+Contratos
+==================================
+
+Parâmetros {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+
+selectInput("ticker_id", label = "Commodity", choices = conv_tb$cmdty,
+            multiple = F,
+            selected = "sugar")
+
+numericInput("lots_id", label = "Número de lotes",
+            value = 1000, step = 100) 
+
+uiOutput("price_in")
+
+
+actionButton("update_button", "Atualizar")
+
+
+```
+
+```{r warning=FALSE, context="server"}
+
+output$price_in <- renderUI({
+  
+px <- reactive({
+prices %>% 
+  filter(cmdty == input$ticker_id) %>% 
+  pull(settle)})
+
+tick <- reactive({
+  conv_tb %>% 
+      filter(cmdty == input$ticker_id) %>% 
+      pull(tick_size)})
+  
+numericInput("price_id", label = "Preço",
+            #value = px(), 
+            value = 15,
+            step = tick()
+            ) 
+})
+
+price <- reactive({
+  prices %>% 
+  #filter(cmdty == "sugar") %>% 
+  filter(cmdty == input$ticker_id) %>% 
+  pull(settle)})
+
+choice_tick <- reactive({
+  conv_tb %>% 
+    #filter(cmdty == "sugar") %>%
+    filter(cmdty == input$ticker_id) %>% 
+    pull(tick_size)})
+
+
+contract_size <- reactive({ 
+  
+  conv_tb %>% 
+      #filter(cmdty == "sugar") %>%
+      filter(cmdty == input$ticker_id) %>% 
+      pull(contract_size)
+    })
+
+
+```
+
+
+Row
+-----------------------------------------------------------------------
+
+### Quantidade
+
+```{r}
+
+valueBoxOutput("weight")
+
+```
+
+
+```{r warning=FALSE, context="server"}
+
+weight <- reactive({
+  
+
+    unit <- conv_tb %>% 
+      filter(cmdty == input$ticker_id) %>% 
+      pull(unit)
+    
+    if(unit == "lb"){input$lots_id * contract_size()/(2.20462*1000)}
+    else{input$lots_id * contract_size()}
+  
+})
+
+
+output$weight <- renderValueBox({ 
+  
+  click <- input$update_button
+  
+  isolate({
+valueBox(value = formatC(paste(round(weight(), digits = 2), " Toneladas"), format = 's'),
+         #icon = "fa-weight",
+         color = hc_cols[1])
+    })})
+
+
+```
+
+
+### Notional
+
+```{r}
+
+
+valueBoxOutput("notional")
+
+
+```
+
+
+```{r warning=FALSE, context="server"}
+
+notional <- reactive({
+  
+  input$lots_id * input$price_id * choice_tick() * contract_size()
+
+  })
+
+output$notional <- renderValueBox({ 
+  
+  click <- input$update_button
+  
+  isolate({
+
+valueBox(value = formatC(paste(notional(), " Dólares"), format = 's'),
+         icon = "fa-money",
+         color =  hc_cols[3])
+})})
+
+
+```
+
+
+Row {data-height=650}
+------------------------
+
+### Preços
+
+```{r}
+
+renderHighchart({
+
+cmdty_raw %>% 
+    #mutate(daily_return = daily_return*100) %>% 
+      hchart(., "line", 
+             hcaes(x = date, y = settle, group = cmdty)) %>% 
+      #hc_colors(cols) %>%
+      hc_tooltip(valueDecimals = 2) %>% 
+      hc_xAxis(title = list(text = "Data")) %>% 
+      hc_yAxis(title = list(text = "Settle"))
+
+})
+
+```
+
+
+Retornos
+================================
+Row {.tabset}
+---------------------------------------------------
+
+### Retorno Diário
+
+```{r}
+
+
+renderHighchart({
+
+cmdty_raw %>% 
+      mutate(daily_return = daily_return*100) %>% 
+      hchart(., "line", 
+             hcaes(x = date, y = daily_return, group = cmdty)) %>% 
+      #hc_colors(cols) %>%
+      hc_tooltip(valueDecimals = 2) %>% 
+      hc_xAxis(title = list(text = "Data")) %>% 
+      hc_yAxis(title = list(text = "Retorno Diário"),
+               labels = list(format = "{value}%"))
+
+})  
+  
+  
+```
+
+### Retorno Acumulado
+
+```{r}
+
+
+renderHighchart({
+
+cmdty_raw %>% 
+      mutate(daily_return = daily_return*100) %>% 
+      hchart(., "line", 
+             hcaes(x = date, y = acc_return, group = cmdty)) %>% 
+      #hc_colors(cols) %>%
+      hc_tooltip(valueDecimals = 2) %>% 
+      hc_xAxis(title = list(text = "Data")) %>% 
+      hc_yAxis(title = list(text = "Retorno Acumulado"),
+               labels = list(format = "{value}%"))
+  
+})
+
+```
+
+### Proxy da Volatilidade
+
+```{r}
+
+renderHighchart({
+
+cmdty_raw %>% #group_by(cmdty) %>% summarise(mean(hist_vol, na.rm = T))
+      mutate(sq_return = sq_return *100) %>% 
+      #mutate(hist_vol = hist_vol*100) %>% 
+      hchart(., "line", 
+             hcaes(x = date, y = sq_return, group = cmdty)) %>% 
+      #hc_colors(cols) %>%
+      hc_tooltip(valueDecimals = 2) %>% 
+      hc_xAxis(title = list(text = "Data")) %>% 
+      hc_yAxis(title = list(text = "Proxy da Volatilidade"),
+               labels = list(format = "{value}%"))
+
+  
+})
+  
+```
+
+### Volatilidade
+
+```{r}
+
+renderHighchart({
+
+cmdty_raw %>% #group_by(cmdty) %>% summarise(mean(hist_vol, na.rm = T))
+      #mutate(sq_return = sq_return *100) %>% 
+      mutate(hist_vol = hist_vol*100) %>% 
+      hchart(., "line", 
+             hcaes(x = date, y = hist_vol, group = cmdty)) %>% 
+      #hc_colors(cols) %>%
+      hc_tooltip(valueDecimals = 2) %>% 
+      hc_xAxis(title = list(text = "Data")) %>% 
+      hc_yAxis(title = list(text = "Volatilidade"),
+               labels = list(format = "{value}%"))
+
+  
+})
+  
+```
+
+
+CAPM Estático
+==================================
+
+Row {.tabset}
+---------------------------------
+
+### Regressão
+
+```{r}
+
+plotOutput("static_capm")
+
+```
+
+### Comparação
+
+```{r}
+
+plotOutput("static_betas")
+
+```
+
+
+```{r warning=FALSE, context="server"}
+
+# preparação da base
+returns_tb <- cmdty_raw %>% 
+  filter(cmdty != "xbcom") %>%  
+  select(cmdty, date, daily_return) %>% 
+  left_join(cmdty_raw %>%  
+              select(cmdty, date, daily_return) %>% 
+              filter(cmdty == "xbcom") %>% 
+              rename(benchmark = cmdty, 
+                     bmk_return = daily_return), by = "date") %>% 
+  na.omit() %>% 
+  select(-date) %>% 
+  group_by(cmdty) %>% 
+  nest(returns = c(daily_return, bmk_return))
+
+# ajuste dos modelos
+tidy_capm <- returns_tb %>% 
+  mutate(model = map(returns, ~lm(daily_return ~ bmk_return, data = .x)))
+  
+# resuttado dos modelos
+tidy_lm <- tidy_capm %>%
+  mutate(coefs = map(model, tidy)) %>%
+  unnest(coefs) %>%
+  #filter(term == "bmk_return") %>%
+  mutate(p.value = p.adjust(p.value))
+
+
+tidier_lm <- tidy_lm %>% 
+  pivot_wider(names_from = term, values_from = estimate) %>% 
+  janitor::clean_names() %>% 
+  fill(intercept) %>% na.omit() %>% 
+  rename(alpha = intercept,
+        beta = bmk_return)
+
+output$static_capm <- renderPlot({
+
+tidier_lm %>% 
+  unnest(returns) %>% 
+  ggplot(aes(x = bmk_return, y = daily_return, color = cmdty)) +
+  geom_point(alpha  = 0.3) +
+  geom_abline(aes(intercept = alpha, slope = beta))+ 
+  geom_smooth(method = "lm", linetype = 2, size = 0.5, show.legend = F)+
+  facet_wrap(~cmdty)+
+  scale_color_manual(values = hc_cols) +
+  labs(x = "Benchmark Returns", y = "Commodity Returns")
+
+})
+
+output$static_betas <- renderPlot({
+
+  tidy_lm %>%
+  mutate(term = if_else(term == "bmk_return", "beta", "alpha")) %>% 
+  #filter(term == "bmk_return") %>%
+  ggplot(aes(estimate, p.value, label = cmdty)) +
+  geom_vline(xintercept = 0, lty = 2,
+    size = 1.5, alpha = 0.7, color = "gray50") +
+  geom_point(aes(color = cmdty), alpha = 0.8, size = 2.5, show.legend = FALSE) +
+  scale_y_log10() +
+  facet_wrap(~term) +
+  geom_text_repel(size = 5) +
+  scale_color_manual(values = hc_cols)
+  
+})
+
+```
+
+
+CAPM Dinámico 
+==================================
+
+Row {.tabset}
+--------------------------------
+
+###  Rolling Window
+
+```{r}
+
+highchartOutput("rolling_betas")
+
+```
+
+```{r warning=FALSE, context="server"}
+
+output$rolling_betas <- renderHighchart({
+
+sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar')
+cocoaRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cocoa')
+cottonRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cotton')
+coffeeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'coffee')
+orangeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'orange_juice')
+
+nPer <- nrow(sugarRets)
+nDiv <- 2
+w0 <- round(nPer/nDiv, 0)
+wf <- (nPer - w0)
+
+#```
+#
+#```{r echo = FALSE}
+
+rBetas <- matrix(NA, wf, 5)
+for (t in 1:wf){
+  sugar_rfit = lm(sugarRets$daily_return[t:(w0+t)] ~ sugarRets$bmk_return[t:(w0+t)])
+  cocoa_rfit = lm(cocoaRets$daily_return[t:(w0+t)] ~ cocoaRets$bmk_return[t:(w0+t)])
+  cotton_rfit = lm(cottonRets$daily_return[t:(w0+t)] ~ cottonRets$bmk_return[t:(w0+t)])
+  coffee_rfit = lm(coffeeRets$daily_return[t:(w0+t)] ~ coffeeRets$bmk_return[t:(w0+t)])
+  orange_rfit = lm(orangeRets$daily_return[t:(w0+t)] ~ orangeRets$bmk_return[t:(w0+t)])
+
+  rBetas[t,]= c(sugar_rfit$coefficients[2],
+               cocoa_rfit$coefficients[2],
+               cotton_rfit$coefficients[2],
+               coffee_rfit$coefficients[2],
+               orange_rfit$coefficients[2])
+}
+
+sBetas <- tidy_lm %>% 
+  filter(term == 'bmk_return') %>% 
+  select(cmdty, estimate)
+
+r_betas <- as_tibble(rBetas) %>% 
+          rename(sugar = V1,cocoa = V2,
+                 cotton = V3,coffee = V4,
+                 orange_juice = V5) %>% 
+  mutate(row = row_number()) %>% 
+  pivot_longer(cols = -row,
+               names_to = "cmdty",
+               values_to = "rolling_beta") %>% 
+  arrange(cmdty) %>% 
+  left_join(sBetas, by = "cmdty")
+
+  r_betas %>% 
+      hchart(., "line", 
+             hcaes(x = row, y = rolling_beta, group = cmdty)) %>% 
+      #hc_colors(cols) %>%
+      hc_tooltip(valueDecimals = 2) %>% 
+      hc_xAxis(title = list(text = "Data")) %>% 
+      hc_yAxis(title = list(text = "Beta"),
+               #labels = list(format = "{value}%"),
+               plotLines = list(list(value = r_betas$estimate)))
+})
+
+
+#ts.plot(rBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Rolling Betas')
+#abline(h=filter(sBetas, cmdty == 'sugar')[2], col=hc_cols[1], lty=2)
+#abline(h=filter(sBetas, cmdty == 'cocoa')[2], col=hc_cols[2], lty=2)
+#abline(h=filter(sBetas, cmdty == 'cotton')[2], col=hc_cols[3], lty=2)
+#abline(h=filter(sBetas, cmdty == 'coffee')[2], col=hc_cols[4], lty=2)
+#abline(h=filter(sBetas, cmdty == 'orange_juice')[2], col=hc_cols[5], lty=2)
+#abline(h=1, col=hc_cols[6], lty=1)
+#legend("bottom", col=hc_cols[1:5], lty=1,
+#       legend=cmdty_name[1:5],
+#       lwd = 2, cex=0.6, box.lty=2)
+
+```
+
+
+###  Expanding Window
+
+```{r}
+
+highchartOutput("expanding_betas")
+
+```
+
+
+```{r warning=FALSE, context="server"}
+
+output$expanding_betas <- renderHighchart({
+  
+sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar')
+cocoaRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cocoa')
+cottonRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cotton')
+coffeeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'coffee')
+orangeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'orange_juice')
+
+nPer <- nrow(sugarRets)
+nDiv <- 2
+w0 <- round(nPer/nDiv, 0)
+wf <- (nPer - w0)
+
+eBetas <- matrix(NA, wf, 5)
+for (t in 1:wf){
+  sugar_efit = lm(sugarRets$daily_return[1:(w0+t)] ~ sugarRets$bmk_return[1:(w0+t)])
+  cocoa_efit = lm(cocoaRets$daily_return[1:(w0+t)] ~ cocoaRets$bmk_return[1:(w0+t)])
+  cotton_efit = lm(cottonRets$daily_return[1:(w0+t)] ~ cottonRets$bmk_return[1:(w0+t)])
+  coffee_efit = lm(coffeeRets$daily_return[1:(w0+t)] ~ coffeeRets$bmk_return[1:(w0+t)])
+  orange_efit = lm(orangeRets$daily_return[1:(w0+t)] ~ orangeRets$bmk_return[1:(w0+t)])
+
+  eBetas[t,]= c(sugar_efit$coefficients[2],
+               cocoa_efit$coefficients[2],
+               cotton_efit$coefficients[2],
+               coffee_efit$coefficients[2],
+               orange_efit$coefficients[2])
+}
+
+sBetas <- tidy_lm %>% 
+  filter(term == 'bmk_return') %>% 
+  select(cmdty, estimate)
+
+e_betas <- as_tibble(eBetas) %>% 
+          rename(sugar = V1,cocoa = V2,
+                 cotton = V3,coffee = V4,
+                 orange_juice = V5) %>% 
+  mutate(row = row_number()) %>% 
+  pivot_longer(cols = -row,
+               names_to = "cmdty",
+               values_to = "expanding_beta") %>% 
+  arrange(cmdty) %>% 
+  left_join(sBetas, by = "cmdty")
+
+  e_betas %>% 
+      hchart(., "line", 
+             hcaes(x = row, y = expanding_beta, group = cmdty)) %>% 
+      #hc_colors(cols) %>%
+      hc_tooltip(valueDecimals = 2) %>% 
+      hc_xAxis(title = list(text = "Data")) %>% 
+      hc_yAxis(title = list(text = "Beta"),
+               #labels = list(format = "{value}%"),
+               plotLines = list(list(value = e_betas$estimate)))
+
+#sBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
+#ts.plot(eBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Expanding Betas')
+#abline(h=filter(sBetas, cmdty == 'sugar')[2], col=hc_cols[1], lty=2)
+#abline(h=filter(sBetas, cmdty == 'cocoa')[2], col=hc_cols[2], lty=2)
+#abline(h=filter(sBetas, cmdty == 'cotton')[2], col=hc_cols[3], lty=2)
+#abline(h=filter(sBetas, cmdty == 'coffee')[2], col=hc_cols[4], lty=2)
+#abline(h=filter(sBetas, cmdty == 'orange_juice')[2], col=hc_cols[5], lty=2)
+#abline(h=1, col=hc_cols[6], lty=1)
+#legend("bottom", col=hc_cols[1:5], lty=1,
+#       legend=cmdty_name[1:5],
+#       lwd = 2, cex=0.6, box.lty=2)
+#
+  
+})
+
+
+```
+
+### Regressão Linear Dinâmica
+
+```{r}
+
+#highchartOutput("dlm_betas")
+
+```
+
+
+```{r warning=FALSE, context="server"}
+# Estático
+#estatico = lm(itau ~ ibov)
+
+#parm = c(0,0,0)
+#bmk <- sugarRets$bmk_return
+#
+## function to build Time Varying Parameter state space model
+#buildCAPM <- function(parm){
+#  parm <- exp(parm)
+#  dlmModReg(X=bmk, dV=parm[1], dW=parm[2:3])
+#}
+#
+## Estimate the model
+#sugarMLE = dlmMLE(y=sugarRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+#cocoaMLE = dlmMLE(y=cocoaRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+#cottonMLE = dlmMLE(y=cottonRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+#coffeeMLE = dlmMLE(y=coffeeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+#orangeMLE = dlmMLE(y=orangeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+#
+#sugarModel <- buildCAPM(sugarMLE$par)
+#cocoaModel <- buildCAPM(cocoaMLE$par)
+#cottonModel <- buildCAPM(cottonMLE$par)
+#coffeeModel <- buildCAPM(coffeeMLE$par)
+#orangeModel <- buildCAPM(retMLE$par)
+#
+#sugarFilter <- dlmFilter(sugarRets$daily_return, sugarModel)
+#cocoaFilter <- dlmFilter(cocoaRets$daily_return, cocoaModel)
+#cottonFilter <- dlmFilter(cottonRets$daily_return, cottonModel)
+#coffeeFilter <- dlmFilter(coffeeRets$daily_return, coffeeModel)
+#orangeFilter <- dlmFilter(orangeRets$daily_return, orangeModel)
+#
+#sugarFilter$m
+#
+#sugarSmooth <- dlmSmooth(sugarRets$daily_return, sugarModel)
+#cocoaSmooth <- dlmSmooth(cocoaRets$daily_return, cocoaModel)
+#cottonSmooth <- dlmSmooth(cottonRets$daily_return, cottonModel)
+#coffeeSmooth <- dlmSmooth(coffeeRets$daily_return, coffeeModel)
+#orangeSmooth <- dlmSmooth(orangeRets$daily_return, orangeModel)
+#
+#sugarSmooth$m
+#
+#par(mfrow=c(1,1))
+#ts.plot(dropFirst(model_filtered$m[,1]), ylab='', main=expression(alpha[t]),lwd=2, col=2)
+#abline(h=estatico$coefficients[1], lty=2)
+#
+#ts.plot(dropFirst(model_filtered$m[,2]), ylab='',main=expression(beta[t]), lwd=2, col=4)
+#abline(h=estatico$coefficients[2], lty=2)
+
+```
+
+### Tidy DLM
+
+```{r}
+
+#plotOutput("tidy_dlm")
+
+
+```
+
+
+```{r warning=FALSE, context="server"}
+#se_fun <- function(parameter){
+#  
+#  se <- sqrt(exp(parameter))
+#  
+#return(se)
+#    
+#}
+#
+## estimate parameters
+#tidy_dlm <- returns_tb %>% 
+#  unnest(returns) %>% 
+#  chop(c(bmk_return, daily_return)) %>% 
+#  mutate(model = map2(bmk_return, daily_return, ~dlmMLE(y = .y,
+#                                                        parm = c(1,1,1),
+#                                                        x.mat = .x,
+#                                                        build = dlm_spec,
+#                                                        hessian=T)))
+## get estimates - verificar aplicação com map
+#tidy_estimates <- tidy_dlm %>% 
+#  unnest_wider(model) %>% #pull(par)
+#  mutate(se = map(par, se_fun))
+#
+#tidy_estimates %>% 
+#  select(cmdty, se) %>% 
+#  unnest_wider(se) %>% 
+#  kable()
+
+# get parameter estimates over time
+# these are the smoothed state values
+#  
+#```
+#
+#
+#```{r}
+
+### Filtered and Smoothed States
+
+
+#dates <- cmdty_raw %>% 
+#  filter(cmdty != "xbcom") %>%  
+#  select(cmdty, date, daily_return) %>% 
+#  left_join(cmdty_raw %>%  
+#              select(cmdty, date, daily_return) %>% 
+#              filter(cmdty == "xbcom") %>% 
+#              rename(benchmark = cmdty, 
+#                     bmk_return = daily_return), by = "date") %>% 
+#  na.omit() %>% 
+#  select(cmdty,date) %>% 
+#  group_by(cmdty) %>% 
+#  chop(date)
+#
+#tidy_filter <- tidy_estimates %>% 
+#  select(cmdty, bmk_return, daily_return, par) %>% 
+#  mutate(adj_spec = map2(par, bmk_return, ~dlm_spec(.x, .y))) %>% 
+#  mutate(dlm_filter = map2(daily_return, adj_spec, ~dlmFilter(.x,.y))) %>% 
+#  mutate(dlm_smooth = map(dlm_filter, dlmSmooth)) %>% 
+#  left_join(dates, by = "cmdty") %>% 
+#  ungroup()
+#  
+#
+#tidy_smooth <- tidy_filter %>% 
+#  unnest_wider(dlm_smooth)
+#
+#
+#  # plot filtered and smoothed states
+#date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+#plot(date,mod2f$m[,1][-1],xlab="day",ylab= expression(alpha[t]),type="l",main="")
+#lines(date,mod2s$s[,1][-1],col=2)
+#abline(h=capm_amazon$coef[1],col=3)
+#abline(h=1,lty=2)
+#
+#date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+#plot(date,mod2f$m[,2][-1],xlab="day",ylab=expression(beta[t]),type="l",main="")
+#lines(date,mod2s$s[,2][-1],col=2)
+#abline(h=capm_amazon$coef[2],col=3)
+#abline(h=1,lty=2)
+  
+```
+
+
+CAPM com Volatilidade
+=============================
+
+Row {.tabset}
+-------------------------------------------------
+
+```{r}
+
+#plotOutput("garch_dlm")
+
+highchartOutput("garch_dlm")
+
+```
+
+
+```{r warning=FALSE, context="server"}
+
+output$garch_dlm <- renderHighchart({
+
+garch_var <- function(garch_fit){
+  
+  var <- garch_fit@fit$sigma^2
+  
+  return(var)
+  
+}
+
+dates <- cmdty_raw %>% 
+  filter(cmdty != "xbcom") %>%  
+  select(cmdty, date, daily_return) %>% 
+  left_join(cmdty_raw %>%  
+              select(cmdty, date, daily_return) %>% 
+              filter(cmdty == "xbcom") %>% 
+              rename(benchmark = cmdty, 
+                     bmk_return = daily_return), by = "date") %>% 
+  na.omit() %>% 
+  select(cmdty,date) %>% 
+  group_by(cmdty) %>% 
+  chop(date)
+
+garch_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
+                    variance.model = list(model="sGARCH", garchOrder=c(1,1)),
+                    distribution.model = "norm")
+
+tidy_garch <- returns_tb %>% 
+  unnest(returns) %>% 
+  mutate(plus_mkt = daily_return + bmk_return,
+         minus_mkt = daily_return - bmk_return) %>% 
+  select(-benchmark) %>% 
+  group_by(cmdty) %>% 
+  chop(-cmdty) %>% 
+  mutate(garch_plus = map(plus_mkt, ~ugarchfit(garch_spec, .x)),
+         garch_minus = map(minus_mkt, ~ugarchfit(garch_spec, .x)),
+         garch_bmk = map(bmk_return, ~ugarchfit(garch_spec, .x))) %>% 
+  mutate(var_plus = map(garch_plus, garch_var),
+         var_minus = map(garch_minus, garch_var),
+         var_bmk = map(garch_bmk, garch_var)) %>% 
+  left_join(dates, by = "cmdty")
+
+tidy_betas <- tidy_garch %>% 
+  select(-starts_with("garch")) %>% 
+  unchop(everything()) %>% 
+  mutate(tv_beta = (var_plus - var_minus)/(4*var_bmk),
+         fitted = tv_beta*bmk_return ,
+         erro = daily_return-fitted,
+         mse = mean(erro^2),
+         mae = mean(abs(erro))) %>% 
+  left_join(select(tidier_lm, cmdty, beta), by = "cmdty")
+
+
+#MAE_beta_garch/MAE_itau_estatico
+
+#MSE_beta_garch/MSE_itau_estatico
+
+tidy_betas %>% 
+      hchart(., "line", 
+             hcaes(x = date, y = tv_beta, group = cmdty)) %>% 
+      #hc_colors(cols) %>%
+      hc_tooltip(valueDecimals = 2) %>% 
+      hc_xAxis(title = list(text = "Data")) %>% 
+      hc_yAxis(title = list(text = "Beta"),
+               #labels = list(format = "{value}%"),
+               plotLines = list(list(value = tidy_betas$beta)))
+
+#tidy_betas %>% 
+#  ggplot(aes(date, tv_beta, color = cmdty)) +
+#  geom_line() +
+#  geom_line(aes(y = beta), linetype = 2, color = "black", size = 0.5) +
+#  facet_wrap(~cmdty, scales = "free", nrow = 3) +
+#  scale_color_manual(values = hc_cols) +
+#  labs(x = "", y = "Beta")
+#
+
+})
+
+```
+
+
+Conclusão
+======================
+
+- Comparar betas vs Benchmark
+
+- Comparar erros dos modelos
+
+Referências
+=======================
+
+- [Train and analyze many models for #TidyTuesday crop yields](https://juliasilge.com/blog/crop-yields/)

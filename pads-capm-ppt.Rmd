@@ -296,7 +296,7 @@ w0 <- round(nPer/nDiv, 0)
 wf <- (nPer - w0)
 ```
 
-### CAPM Rolling Window
+### Rolling Window
 
 ```{r echo = FALSE}
 rBetas <- matrix(NA, wf, 5)
@@ -325,14 +325,10 @@ abline(h=1, col=hc_cols[6], lty=1)
 legend("bottom", col=hc_cols[1:5], lty=1,
        legend=cmdty_name[1:5],
        lwd = 2, cex=0.6, box.lty=2)
-
-
-
-
 ```
 
 
-##  Expanding Window
+###  Expanding Window
 
 ```{r echo = FALSE}
 
@@ -352,7 +348,7 @@ for (t in 1:wf){
 }
 
 sBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
-ts.plot(eBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Rolling Betas')
+ts.plot(eBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Expanding Betas')
 abline(h=filter(sBetas, cmdty == 'sugar')[2], col=hc_cols[1], lty=2)
 abline(h=filter(sBetas, cmdty == 'cocoa')[2], col=hc_cols[2], lty=2)
 abline(h=filter(sBetas, cmdty == 'cotton')[2], col=hc_cols[3], lty=2)
@@ -364,15 +360,13 @@ legend("bottom", col=hc_cols[1:5], lty=1,
        lwd = 2, cex=0.6, box.lty=2)
 
 
-
-
 ```
 
 ## Dinâmico 
 
 ```{r}
 # Estático
-estatico = lm(itau ~ ibov)
+#estatico = lm(itau ~ ibov)
 
 parm = c(0,0,0)
 bmk <- sugarRets$bmk_return
@@ -515,6 +509,19 @@ garch_var <- function(garch_fit){
   return(var)
   
 }
+
+dates <- cmdty_raw %>% 
+  filter(cmdty != "xbcom") %>%  
+  select(cmdty, date, daily_return) %>% 
+  left_join(cmdty_raw %>%  
+              select(cmdty, date, daily_return) %>% 
+              filter(cmdty == "xbcom") %>% 
+              rename(benchmark = cmdty, 
+                     bmk_return = daily_return), by = "date") %>% 
+  na.omit() %>% 
+  select(cmdty,date) %>% 
+  group_by(cmdty) %>% 
+  chop(date)
 
 garch_spec <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
                     variance.model = list(model="sGARCH", garchOrder=c(1,1)),
