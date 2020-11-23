@@ -547,17 +547,41 @@ r_betas <- as_tibble(rBetas) %>%
   arrange(cmdty) %>% 
   left_join(sBetas, by = "cmdty")
 
-  r_betas %>% 
-      hchart(., "line", 
-             hcaes(x = row, y = rolling_beta, group = cmdty)) %>% 
-      #hc_colors(cols) %>%
-      hc_tooltip(valueDecimals = 2) %>% 
-      hc_xAxis(title = list(text = "Data")) %>% 
-      hc_yAxis(title = list(text = "Beta"),
-               #labels = list(format = "{value}%"),
-               plotLines = list(list(value = r_betas$estimate)))
-})
+highchart() %>%
+hc_add_series(data = r_betas,
+              type = 'line',
+              hcaes(x = row,
+                    y = rolling_beta,
+                    group = cmdty),
+              color = hc_cols[1:5],
+              showInLegend = TRUE
+              ) %>%
+hc_add_series(data = r_betas,
+              type = 'line',
+              dashStyle = "shortdot",
+              hcaes(x = row,
+                    y = estimate,
+                    group = cmdty),
+              color = hc_cols[1:5],
+              showInLegend = FALSE
+              ) %>% 
+hc_tooltip(valueDecimals = 2) %>% 
+hc_xAxis(title = list(text = "Data")) %>% 
+hc_yAxis(title = list(text = "Beta")) %>% 
+hc_title(text = "Beta Dinâmico",
+         align = 'left') %>% 
+hc_subtitle(text = "Rolling Window x Estático",
+            align = 'left')
 
+# r_betas %>% 
+#     hchart(., "line", 
+#            hcaes(x = row, y = rolling_beta, group = cmdty)) %>% 
+#     #hc_colors(cols) %>%
+#     hc_tooltip(valueDecimals = 2) %>% 
+#     hc_xAxis(title = list(text = "Data")) %>% 
+#     hc_yAxis(title = list(text = "Beta"),
+#              #labels = list(format = "{value}%"),
+#              plotLines = list(list(value = r_betas$estimate)))
 
 #ts.plot(rBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Rolling Betas')
 #abline(h=filter(sBetas, cmdty == 'sugar')[2], col=hc_cols[1], lty=2)
@@ -569,6 +593,8 @@ r_betas <- as_tibble(rBetas) %>%
 #legend("bottom", col=hc_cols[1:5], lty=1,
 #       legend=cmdty_name[1:5],
 #       lwd = 2, cex=0.6, box.lty=2)
+})
+
 
 ```
 
@@ -627,16 +653,44 @@ e_betas <- as_tibble(eBetas) %>%
   arrange(cmdty) %>% 
   left_join(sBetas, by = "cmdty")
 
-  e_betas %>% 
-      hchart(., "line", 
-             hcaes(x = row, y = expanding_beta, group = cmdty)) %>% 
-      #hc_colors(cols) %>%
-      hc_tooltip(valueDecimals = 2) %>% 
-      hc_xAxis(title = list(text = "Data")) %>% 
-      hc_yAxis(title = list(text = "Beta"),
-               #labels = list(format = "{value}%"),
-               plotLines = list(list(value = e_betas$estimate)))
 
+highchart() %>%
+hc_add_series(data = e_betas,
+              type = 'line',
+              hcaes(x = row,
+                    y = expanding_beta,
+                    group = cmdty),
+              color = hc_cols[1:5],
+              showInLegend = TRUE
+              ) %>%
+hc_add_series(data = e_betas,
+              type = 'line',
+              dashStyle = "shortdot",
+              hcaes(x = row,
+                    y = estimate,
+                    group = cmdty),
+              color = hc_cols[1:5],
+              showInLegend = FALSE
+              ) %>% 
+hc_tooltip(valueDecimals = 2) %>% 
+hc_xAxis(title = list(text = "Data")) %>% 
+hc_yAxis(title = list(text = "Beta")) %>% 
+hc_title(text = "Beta Dinâmico",
+         align = 'left') %>% 
+hc_subtitle(text = "Expanding Window x Estático",
+            align = 'left')
+
+# e_betas %>% 
+#     hchart(., "line", 
+#            hcaes(x = row, y = expanding_beta, group = cmdty)) %>% 
+#     #hc_colors(cols) %>%
+#     hc_tooltip(valueDecimals = 2) %>% 
+#     hc_xAxis(title = list(text = "Data")) %>% 
+#     hc_yAxis(title = list(text = "Beta"),
+#              #labels = list(format = "{value}%"),
+#              plotLines = list(list(value = e_betas$estimate)))
+
+    
 #sBetas <- tidy_lm %>% filter(term == 'bmk_return') %>% select(cmdty, estimate)
 #ts.plot(eBetas, col=hc_cols[1:5], lwd=2, ylim=c(0.00,1), main='Expanding Betas')
 #abline(h=filter(sBetas, cmdty == 'sugar')[2], col=hc_cols[1], lty=2)
