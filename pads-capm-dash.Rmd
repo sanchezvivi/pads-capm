@@ -773,43 +773,43 @@ hc_subtitle(text = "Expanding Window x Estático",
 
 ```{r}
 
-#plotOutput("tidy_dlm")
+plotOutput("tidy_dlm")
 
 
 ```
 
 
 ```{r warning=FALSE, context="server"}
-#se_fun <- function(parameter){
-#  
-#  se <- sqrt(exp(parameter))
-#  
-#return(se)
-#    
-#}
-#
-## estimate parameters
-#tidy_dlm <- returns_tb %>% 
-#  unnest(returns) %>% 
-#  chop(c(bmk_return, daily_return)) %>% 
-#  mutate(model = map2(bmk_return, daily_return, ~dlmMLE(y = .y,
-#                                                        parm = c(1,1,1),
-#                                                        x.mat = .x,
-#                                                        build = dlm_spec,
-#                                                        hessian=T)))
-## get estimates - verificar aplicação com map
-#tidy_estimates <- tidy_dlm %>% 
-#  unnest_wider(model) %>% #pull(par)
-#  mutate(se = map(par, se_fun))
-#
-#tidy_estimates %>% 
-#  select(cmdty, se) %>% 
-#  unnest_wider(se) %>% 
-#  kable()
+# se_fun <- function(parameter){
+# 
+#   se <- sqrt(exp(parameter))
+# 
+# return(se)
+# 
+# }
+
+# estimate parameters
+# tidy_dlm <- returns_tb %>%
+#   unnest(returns) %>%
+#   chop(c(bmk_return, daily_return)) %>%
+#   mutate(model = map2(bmk_return, daily_return, ~dlmMLE(y = .y,
+#                                                         parm = c(1,1,1),
+#                                                         x.mat = .x,
+#                                                         build = dlm_spec,
+#                                                         hessian=T)))
+# # get estimates - verificar aplicação com map
+# tidy_estimates <- tidy_dlm %>%
+#   unnest_wider(model) %>% #pull(par)
+#   mutate(se = map(par, se_fun))
+# 
+# tidy_estimates %>%
+#   select(cmdty, se) %>%
+#   unnest_wider(se) %>%
+#   kable()
 
 # get parameter estimates over time
 # these are the smoothed state values
-#  
+#
 #```
 #
 #
@@ -818,44 +818,44 @@ hc_subtitle(text = "Expanding Window x Estático",
 ### Filtered and Smoothed States
 
 
-#dates <- cmdty_raw %>% 
-#  filter(cmdty != "xbcom") %>%  
-#  select(cmdty, date, daily_return) %>% 
-#  left_join(cmdty_raw %>%  
-#              select(cmdty, date, daily_return) %>% 
-#              filter(cmdty == "xbcom") %>% 
-#              rename(benchmark = cmdty, 
-#                     bmk_return = daily_return), by = "date") %>% 
-#  na.omit() %>% 
-#  select(cmdty,date) %>% 
-#  group_by(cmdty) %>% 
-#  chop(date)
-#
-#tidy_filter <- tidy_estimates %>% 
-#  select(cmdty, bmk_return, daily_return, par) %>% 
-#  mutate(adj_spec = map2(par, bmk_return, ~dlm_spec(.x, .y))) %>% 
-#  mutate(dlm_filter = map2(daily_return, adj_spec, ~dlmFilter(.x,.y))) %>% 
-#  mutate(dlm_smooth = map(dlm_filter, dlmSmooth)) %>% 
-#  left_join(dates, by = "cmdty") %>% 
-#  ungroup()
-#  
-#
-#tidy_smooth <- tidy_filter %>% 
-#  unnest_wider(dlm_smooth)
-#
-#
-#  # plot filtered and smoothed states
-#date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
-#plot(date,mod2f$m[,1][-1],xlab="day",ylab= expression(alpha[t]),type="l",main="")
-#lines(date,mod2s$s[,1][-1],col=2)
-#abline(h=capm_amazon$coef[1],col=3)
-#abline(h=1,lty=2)
-#
-#date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
-#plot(date,mod2f$m[,2][-1],xlab="day",ylab=expression(beta[t]),type="l",main="")
-#lines(date,mod2s$s[,2][-1],col=2)
-#abline(h=capm_amazon$coef[2],col=3)
-#abline(h=1,lty=2)
+# dates <- cmdty_raw %>%
+#   filter(cmdty != "xbcom") %>%
+#   select(cmdty, date, daily_return) %>%
+#   left_join(cmdty_raw %>%
+#               select(cmdty, date, daily_return) %>%
+#               filter(cmdty == "xbcom") %>%
+#               rename(benchmark = cmdty,
+#                      bmk_return = daily_return), by = "date") %>%
+#   na.omit() %>%
+#   select(cmdty,date) %>%
+#   group_by(cmdty) %>%
+#   chop(date)
+# #
+# tidy_filter <- tidy_estimates %>%
+#   select(cmdty, bmk_return, daily_return, par) %>%
+#   mutate(adj_spec = map2(par, bmk_return, ~dlm_spec(.x, .y))) %>%
+#   mutate(dlm_filter = map2(daily_return, adj_spec, ~dlmFilter(.x,.y))) %>%
+#   mutate(dlm_smooth = map(dlm_filter, dlmSmooth)) %>%
+#   left_join(dates, by = "cmdty") %>%
+#   ungroup()
+# 
+# #
+# tidy_smooth <- tidy_filter %>%
+#   unnest_wider(dlm_smooth)
+# #
+# #
+# #  # plot filtered and smoothed states
+# date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+# plot(date,mod2f$m[,1][-1],xlab="day",ylab= expression(alpha[t]),type="l",main="")
+# lines(date,mod2s$s[,1][-1],col=2)
+# abline(h=capm_amazon$coef[1],col=3)
+# abline(h=1,lty=2)
+# #
+# date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+# plot(date,mod2f$m[,2][-1],xlab="day",ylab=expression(beta[t]),type="l",main="")
+# lines(date,mod2s$s[,2][-1],col=2)
+# abline(h=capm_amazon$coef[2],col=3)
+# abline(h=1,lty=2)
   
 ```
 
