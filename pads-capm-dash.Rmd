@@ -488,8 +488,14 @@ output$static_betas <- renderPlot({
 
 ```
 
+<<<<<<< HEAD
 CAPM Dinámico
 =======================
+=======
+
+CAPM Dinâmico 
+==================================
+>>>>>>> edc604fbe2ed67f6bd657e54eccbf3d33228f8b2
 
 Row {.tabset}
 ------------------
@@ -721,45 +727,96 @@ hc_subtitle(text = "Expanding Window x Estático",
 
 ```{r warning=FALSE, context="server"}
 # Estático
-#estatico = lm(itau ~ ibov)
+sBetas <- tidy_lm %>% 
+  filter(term == 'bmk_return') %>% 
+  select(cmdty, estimate)
 
-#parm = c(0,0,0)
-#bmk <- sugarRets$bmk_return
-#
-## function to build Time Varying Parameter state space model
-#buildCAPM <- function(parm){
-#  parm <- exp(parm)
-#  dlmModReg(X=bmk, dV=parm[1], dW=parm[2:3])
-#}
-#
-## Estimate the model
-#sugarMLE = dlmMLE(y=sugarRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
-#cocoaMLE = dlmMLE(y=cocoaRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
-#cottonMLE = dlmMLE(y=cottonRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
-#coffeeMLE = dlmMLE(y=coffeeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
-#orangeMLE = dlmMLE(y=orangeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
-#
-#sugarModel <- buildCAPM(sugarMLE$par)
-#cocoaModel <- buildCAPM(cocoaMLE$par)
-#cottonModel <- buildCAPM(cottonMLE$par)
-#coffeeModel <- buildCAPM(coffeeMLE$par)
-#orangeModel <- buildCAPM(retMLE$par)
-#
-#sugarFilter <- dlmFilter(sugarRets$daily_return, sugarModel)
-#cocoaFilter <- dlmFilter(cocoaRets$daily_return, cocoaModel)
-#cottonFilter <- dlmFilter(cottonRets$daily_return, cottonModel)
-#coffeeFilter <- dlmFilter(coffeeRets$daily_return, coffeeModel)
-#orangeFilter <- dlmFilter(orangeRets$daily_return, orangeModel)
-#
+# Dinâmico
+sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar')
+cocoaRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cocoa')
+cottonRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cotton')
+coffeeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'coffee')
+orangeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'orange_juice')
+bmk <- sugarRets$bmk_return
+
+parm = c(0,0,0)
+
+# function to build Time Varying Parameter state space model
+buildCAPM <- function(parm){
+  parm <- exp(parm)
+  dlmModReg(X=bmk, dV=parm[1], dW=parm[2:3])
+}
+
+# Estimate the model
+sugarMLE = dlmMLE(y=sugarRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+cocoaMLE = dlmMLE(y=cocoaRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+cottonMLE = dlmMLE(y=cottonRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+coffeeMLE = dlmMLE(y=coffeeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+orangeMLE = dlmMLE(y=orangeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+
+sugarModel <- buildCAPM(sugarMLE$par)
+cocoaModel <- buildCAPM(cocoaMLE$par)
+cottonModel <- buildCAPM(cottonMLE$par)
+coffeeModel <- buildCAPM(coffeeMLE$par)
+orangeModel <- buildCAPM(orangeMLE$par)
+
+sugarFilter <- dlmFilter(sugarRets$daily_return, sugarModel)
+cocoaFilter <- dlmFilter(cocoaRets$daily_return, cocoaModel)
+cottonFilter <- dlmFilter(cottonRets$daily_return, cottonModel)
+coffeeFilter <- dlmFilter(coffeeRets$daily_return, coffeeModel)
+orangeFilter <- dlmFilter(orangeRets$daily_return, orangeModel)
+
 #sugarFilter$m
-#
-#sugarSmooth <- dlmSmooth(sugarRets$daily_return, sugarModel)
-#cocoaSmooth <- dlmSmooth(cocoaRets$daily_return, cocoaModel)
-#cottonSmooth <- dlmSmooth(cottonRets$daily_return, cottonModel)
-#coffeeSmooth <- dlmSmooth(coffeeRets$daily_return, coffeeModel)
-#orangeSmooth <- dlmSmooth(orangeRets$daily_return, orangeModel)
-#
-#sugarSmooth$m
+
+sugarSmooth <- dlmSmooth(sugarFilter)
+cocoaSmooth <- dlmSmooth(cocoaFilter)
+cottonSmooth <- dlmSmooth(cottonFilter)
+coffeeSmooth <- dlmSmooth(coffeeFilter)
+orangeSmooth <- dlmSmooth(orangeFilter)
+
+#sugarSmooth$s
+
+dlm_Betas <- 
+  tibble(sugar = sugarFilter$m[,2],
+         cocoa = cocoaFilter$m[,2],
+         cotton = cottonFilter$m[,2],
+         coffee = coffeeFilter$m[,2],
+         orange_juice = orangeFilter$m[,2]) %>% 
+  mutate(row = row_number()) %>% 
+  pivot_longer(!row,
+               names_to = "cmdty",
+               values_to = "beta_f") %>% 
+  arrange(cmdty) %>% 
+  left_join(
+    tibble(sugar = sugarSmooth$s[,2],
+           cocoa = cocoaSmooth$s[,2],
+           cotton = cottonSmooth$s[,2],
+           coffee = coffeeSmooth$s[,2],
+           orange_juice = orangeSmooth$s[,2]) %>% 
+      mutate(row = row_number()) %>% 
+      pivot_longer(!row,
+                   names_to = "cmdty",
+                   values_to = "beta_s") %>% 
+      arrange(cmdty),
+    by = c('row', 'cmdty')) %>% 
+  left_join(sBetas, by = "cmdty")
+
+highchart() %>%
+  hc_add_series(data = dlm_Betas,
+                type = 'line',
+                hcaes(x = row,
+                      y = beta_f,
+                      group = cmdty),
+                color = hc_cols[1:5],
+                showInLegend = TRUE) %>%
+  hc_yAxis(title = list(text = "Beta"),
+           plotLines = list(list(value = 0.571, color = hc_cols[5], dashStyle = 'shortdot'),
+                            list(value = 0.215, color = hc_cols[1], dashStyle = 'shortdot'),
+                            list(value = 0.510, color = hc_cols[3], dashStyle = 'shortdot'),
+                            list(value = 0.597, color = hc_cols[2], dashStyle = 'shortdot'),
+                            list(value = .334, color = hc_cols[4], dashStyle = 'shortdot')))
+
+
 #
 #par(mfrow=c(1,1))
 #ts.plot(dropFirst(model_filtered$m[,1]), ylab='', main=expression(alpha[t]),lwd=2, col=2)
@@ -768,8 +825,106 @@ hc_subtitle(text = "Expanding Window x Estático",
 #ts.plot(dropFirst(model_filtered$m[,2]), ylab='',main=expression(beta[t]), lwd=2, col=4)
 #abline(h=estatico$coefficients[2], lty=2)
 
+
+
+
+
 ```
 
+<<<<<<< HEAD
+=======
+### Tidy DLM
+
+```{r}
+
+plotOutput("tidy_dlm")
+
+
+```
+
+
+```{r warning=FALSE, context="server"}
+# se_fun <- function(parameter){
+# 
+#   se <- sqrt(exp(parameter))
+# 
+# return(se)
+# 
+# }
+
+# estimate parameters
+# tidy_dlm <- returns_tb %>%
+#   unnest(returns) %>%
+#   chop(c(bmk_return, daily_return)) %>%
+#   mutate(model = map2(bmk_return, daily_return, ~dlmMLE(y = .y,
+#                                                         parm = c(1,1,1),
+#                                                         x.mat = .x,
+#                                                         build = dlm_spec,
+#                                                         hessian=T)))
+# # get estimates - verificar aplicação com map
+# tidy_estimates <- tidy_dlm %>%
+#   unnest_wider(model) %>% #pull(par)
+#   mutate(se = map(par, se_fun))
+# 
+# tidy_estimates %>%
+#   select(cmdty, se) %>%
+#   unnest_wider(se) %>%
+#   kable()
+
+# get parameter estimates over time
+# these are the smoothed state values
+#
+#```
+#
+#
+#```{r}
+
+### Filtered and Smoothed States
+
+
+# dates <- cmdty_raw %>%
+#   filter(cmdty != "xbcom") %>%
+#   select(cmdty, date, daily_return) %>%
+#   left_join(cmdty_raw %>%
+#               select(cmdty, date, daily_return) %>%
+#               filter(cmdty == "xbcom") %>%
+#               rename(benchmark = cmdty,
+#                      bmk_return = daily_return), by = "date") %>%
+#   na.omit() %>%
+#   select(cmdty,date) %>%
+#   group_by(cmdty) %>%
+#   chop(date)
+# #
+# tidy_filter <- tidy_estimates %>%
+#   select(cmdty, bmk_return, daily_return, par) %>%
+#   mutate(adj_spec = map2(par, bmk_return, ~dlm_spec(.x, .y))) %>%
+#   mutate(dlm_filter = map2(daily_return, adj_spec, ~dlmFilter(.x,.y))) %>%
+#   mutate(dlm_smooth = map(dlm_filter, dlmSmooth)) %>%
+#   left_join(dates, by = "cmdty") %>%
+#   ungroup()
+# 
+# #
+# tidy_smooth <- tidy_filter %>%
+#   unnest_wider(dlm_smooth)
+# #
+# #
+# #  # plot filtered and smoothed states
+# date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+# plot(date,mod2f$m[,1][-1],xlab="day",ylab= expression(alpha[t]),type="l",main="")
+# lines(date,mod2s$s[,1][-1],col=2)
+# abline(h=capm_amazon$coef[1],col=3)
+# abline(h=1,lty=2)
+# #
+# date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
+# plot(date,mod2f$m[,2][-1],xlab="day",ylab=expression(beta[t]),type="l",main="")
+# lines(date,mod2s$s[,2][-1],col=2)
+# abline(h=capm_amazon$coef[2],col=3)
+# abline(h=1,lty=2)
+  
+```
+
+
+>>>>>>> edc604fbe2ed67f6bd657e54eccbf3d33228f8b2
 CAPM com Volatilidade
 =======================
 
