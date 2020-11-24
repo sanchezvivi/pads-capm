@@ -120,7 +120,8 @@ prices <- cmdty_raw %>%
 
 Introdução
 ==============================
-
+Row
+------------------------------------------------------
 
 <font size = "7">Modelagem dinâmica dos preços das commodities softs listadas na [Intercontinental Exchange (ICE)](https://www.theice.com/products/Futures-Options/Agriculture)</font>
 
@@ -135,7 +136,9 @@ Introdução
 -    <font size = "5">Suco de laranja congelado - `orange_juice`</font>
 
 -    <font size = "5">Benchamrk: [Bloomberg Commodity Index](https://www.bloomberg.com/company/press/bloomberg-commodity-index-2020-target-weights-announced/) - `bcom`</font>
->
+
+Column
+------------------------------------------------------
 
 ```{r fig.align="right", out.width = "20%"}
 
@@ -146,10 +149,10 @@ include_graphics("img/ice_contract.png")
 ```
 
 Contratos
-==================================
+============================================
 
 Parâmetros {.sidebar}
---------------------------
+--------------------------------------------------
 
 ```{r}
 
@@ -348,7 +351,7 @@ cmdty_raw %>%
       #hc_colors(cols) %>%
       hc_tooltip(valueDecimals = 2) %>% 
       hc_xAxis(title = list(text = "Data")) %>% 
-      hc_yAxis(title = list(text = "Retorno Acumulado"),
+      hc_yAxis(title = list(text = "Retorno Acumulado (a.p.)"),
                labels = list(format = "{value}%"))
   
 })
@@ -369,7 +372,7 @@ cmdty_raw %>% #group_by(cmdty) %>% summarise(mean(hist_vol, na.rm = T))
       #hc_colors(cols) %>%
       hc_tooltip(valueDecimals = 2) %>% 
       hc_xAxis(title = list(text = "Data")) %>% 
-      hc_yAxis(title = list(text = "Proxy da Volatilidade"),
+      hc_yAxis(title = list(text = "Proxy da Volatilidade (a.d.)"),
                labels = list(format = "{value}%"))
 
   
@@ -377,7 +380,7 @@ cmdty_raw %>% #group_by(cmdty) %>% summarise(mean(hist_vol, na.rm = T))
   
 ```
 
-### Volatilidade
+### Volatilidade 
 
 ```{r}
 
@@ -391,7 +394,7 @@ cmdty_raw %>% #group_by(cmdty) %>% summarise(mean(hist_vol, na.rm = T))
       #hc_colors(cols) %>%
       hc_tooltip(valueDecimals = 2) %>% 
       hc_xAxis(title = list(text = "Data")) %>% 
-      hc_yAxis(title = list(text = "Volatilidade"),
+      hc_yAxis(title = list(text = "Volatilidade (a.a.)"),
                labels = list(format = "{value}%"))
 
   
@@ -436,6 +439,7 @@ returns_tb <- cmdty_raw %>%
   select(-date) %>% 
   group_by(cmdty) %>% 
   nest(returns = c(daily_return, bmk_return))
+
 
 # ajuste dos modelos
 tidy_capm <- returns_tb %>% 
@@ -488,14 +492,10 @@ output$static_betas <- renderPlot({
 
 ```
 
-<<<<<<< HEAD
-CAPM Dinámico
-=======================
-=======
 
 CAPM Dinâmico 
 ==================================
->>>>>>> edc604fbe2ed67f6bd657e54eccbf3d33228f8b2
+
 
 Row {.tabset}
 ------------------
@@ -721,12 +721,15 @@ hc_subtitle(text = "Expanding Window x Estático",
 
 ```{r}
 
-#highchartOutput("dlm_betas")
+highchartOutput("dlm_betas")
 
 ```
 
 ```{r warning=FALSE, context="server"}
 # Estático
+
+output$dlm_betas <- renderHighchart({
+  
 sBetas <- tidy_lm %>% 
   filter(term == 'bmk_return') %>% 
   select(cmdty, estimate)
@@ -776,8 +779,7 @@ orangeSmooth <- dlmSmooth(orangeFilter)
 
 #sugarSmooth$s
 
-dlm_Betas <- 
-  tibble(sugar = sugarFilter$m[,2],
+dlm_Betas <- tibble(sugar = sugarFilter$m[,2],
          cocoa = cocoaFilter$m[,2],
          cotton = cottonFilter$m[,2],
          coffee = coffeeFilter$m[,2],
@@ -787,8 +789,7 @@ dlm_Betas <-
                names_to = "cmdty",
                values_to = "beta_f") %>% 
   arrange(cmdty) %>% 
-  left_join(
-    tibble(sugar = sugarSmooth$s[,2],
+  left_join(tibble(sugar = sugarSmooth$s[,2],
            cocoa = cocoaSmooth$s[,2],
            cotton = cottonSmooth$s[,2],
            coffee = coffeeSmooth$s[,2],
@@ -809,7 +810,7 @@ highchart() %>%
                       group = cmdty),
                 color = hc_cols[1:5],
                 showInLegend = TRUE) %>%
-  hc_yAxis(title = list(text = "Beta"),
+  hc_yAxis(title = list(text = "DLM Beta"),
            plotLines = list(list(value = 0.571, color = hc_cols[5], dashStyle = 'shortdot'),
                             list(value = 0.215, color = hc_cols[1], dashStyle = 'shortdot'),
                             list(value = 0.510, color = hc_cols[3], dashStyle = 'shortdot'),
@@ -826,116 +827,23 @@ highchart() %>%
 #abline(h=estatico$coefficients[2], lty=2)
 
 
-
-
-
-```
-
-<<<<<<< HEAD
-=======
-### Tidy DLM
-
-```{r}
-
-plotOutput("tidy_dlm")
+})
 
 
 ```
 
 
-```{r warning=FALSE, context="server"}
-# se_fun <- function(parameter){
-# 
-#   se <- sqrt(exp(parameter))
-# 
-# return(se)
-# 
-# }
-
-# estimate parameters
-# tidy_dlm <- returns_tb %>%
-#   unnest(returns) %>%
-#   chop(c(bmk_return, daily_return)) %>%
-#   mutate(model = map2(bmk_return, daily_return, ~dlmMLE(y = .y,
-#                                                         parm = c(1,1,1),
-#                                                         x.mat = .x,
-#                                                         build = dlm_spec,
-#                                                         hessian=T)))
-# # get estimates - verificar aplicação com map
-# tidy_estimates <- tidy_dlm %>%
-#   unnest_wider(model) %>% #pull(par)
-#   mutate(se = map(par, se_fun))
-# 
-# tidy_estimates %>%
-#   select(cmdty, se) %>%
-#   unnest_wider(se) %>%
-#   kable()
-
-# get parameter estimates over time
-# these are the smoothed state values
-#
-#```
-#
-#
-#```{r}
-
-### Filtered and Smoothed States
-
-
-# dates <- cmdty_raw %>%
-#   filter(cmdty != "xbcom") %>%
-#   select(cmdty, date, daily_return) %>%
-#   left_join(cmdty_raw %>%
-#               select(cmdty, date, daily_return) %>%
-#               filter(cmdty == "xbcom") %>%
-#               rename(benchmark = cmdty,
-#                      bmk_return = daily_return), by = "date") %>%
-#   na.omit() %>%
-#   select(cmdty,date) %>%
-#   group_by(cmdty) %>%
-#   chop(date)
-# #
-# tidy_filter <- tidy_estimates %>%
-#   select(cmdty, bmk_return, daily_return, par) %>%
-#   mutate(adj_spec = map2(par, bmk_return, ~dlm_spec(.x, .y))) %>%
-#   mutate(dlm_filter = map2(daily_return, adj_spec, ~dlmFilter(.x,.y))) %>%
-#   mutate(dlm_smooth = map(dlm_filter, dlmSmooth)) %>%
-#   left_join(dates, by = "cmdty") %>%
-#   ungroup()
-# 
-# #
-# tidy_smooth <- tidy_filter %>%
-#   unnest_wider(dlm_smooth)
-# #
-# #
-# #  # plot filtered and smoothed states
-# date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
-# plot(date,mod2f$m[,1][-1],xlab="day",ylab= expression(alpha[t]),type="l",main="")
-# lines(date,mod2s$s[,1][-1],col=2)
-# abline(h=capm_amazon$coef[1],col=3)
-# abline(h=1,lty=2)
-# #
-# date <-  df.tickers$ref.date[df.tickers$ticker == 'AMZN'][-1]
-# plot(date,mod2f$m[,2][-1],xlab="day",ylab=expression(beta[t]),type="l",main="")
-# lines(date,mod2s$s[,2][-1],col=2)
-# abline(h=capm_amazon$coef[2],col=3)
-# abline(h=1,lty=2)
-  
-```
-
-
->>>>>>> edc604fbe2ed67f6bd657e54eccbf3d33228f8b2
 CAPM com Volatilidade
 =======================
 
 Row {.tabset}
-----------------------
+------------------------------------------------------
 
 ```{r}
 
-#plotOutput("garch_dlm")
+plotOutput("garch_dlm")
 
-highchartOutput("garch_dlm")
+#highchartOutput("garch_dlm")
 
 ```
 
