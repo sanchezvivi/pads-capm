@@ -198,6 +198,7 @@ prices %>%
   #filter(cmdty == "sugar") %>% 
   filter(cmdty == input$ticker_id) %>% 
   pull(settle) 
+  
   })
 
 tick <- reactive({
@@ -207,8 +208,8 @@ tick <- reactive({
   })
   
 numericInput("price_id", label = "Preço",
-            value = px(), 
-            #value = prices$settle[1],
+            #value = px(), 
+            value = prices$settle[1],
             step = tick()
             ) 
 })
@@ -666,6 +667,8 @@ w0 <- round(nPer/nDiv, 0)
 wf <- (nPer - w0)
 
 eBetas <- matrix(NA, wf, 5)
+
+
 for (t in 1:wf){
   sugar_efit = lm(sugarRets$daily_return[1:(w0+t)] ~ sugarRets$bmk_return[1:(w0+t)])
   cocoa_efit = lm(cocoaRets$daily_return[1:(w0+t)] ~ cocoaRets$bmk_return[1:(w0+t)])
@@ -773,12 +776,12 @@ sBetas <- tidy_lm %>%
   select(cmdty, estimate)
 
 # Dinâmico
-sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar')
-cocoaRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cocoa')
-cottonRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cotton')
-coffeeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'coffee')
-orangeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'orange_juice')
-bmk <- sugarRets$bmk_return
+sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar') %>% na.omit() %>% pull(daily_return)
+cocoaRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cocoa') %>% na.omit() %>% pull(daily_return)
+cottonRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'cotton') %>% na.omit() %>% pull(daily_return)
+coffeeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'coffee') %>% na.omit() %>% pull(daily_return)
+orangeRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'orange_juice') %>% na.omit() %>% pull(daily_return)
+bmk <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar') %>% na.omit() %>% pull(bmk_return)
 
 parm = c(0,0,0)
 
@@ -789,11 +792,12 @@ buildCAPM <- function(parm){
 }
 
 # Estimate the model
-sugarMLE = dlmMLE(y=sugarRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
-cocoaMLE = dlmMLE(y=cocoaRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
-cottonMLE = dlmMLE(y=cottonRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
-coffeeMLE = dlmMLE(y=coffeeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
-orangeMLE = dlmMLE(y=orangeRets$daily_return, parm=parm, build=buildCAPM, hessian=T)
+sugarMLE  <-  dlmMLE(y=sugarRets, parm = parm, build=buildCAPM, hessian=T)
+cocoaMLE  <-  dlmMLE(y=cocoaRets, parm = parm, build=buildCAPM, hessian=T)
+cottonMLE <-  dlmMLE(y=cottonRets, parm = parm, build=buildCAPM, hessian=T)
+coffeeMLE <-  dlmMLE(y=coffeeRets, parm = parm, build=buildCAPM, hessian=T, debug = TRUE)
+orangeMLE <-  dlmMLE(y=orangeRets, parm = parm, build=buildCAPM, hessian=T)
+
 
 sugarModel <- buildCAPM(sugarMLE$par)
 cocoaModel <- buildCAPM(cocoaMLE$par)
@@ -801,11 +805,11 @@ cottonModel <- buildCAPM(cottonMLE$par)
 coffeeModel <- buildCAPM(coffeeMLE$par)
 orangeModel <- buildCAPM(orangeMLE$par)
 
-sugarFilter <- dlmFilter(sugarRets$daily_return, sugarModel)
-cocoaFilter <- dlmFilter(cocoaRets$daily_return, cocoaModel)
-cottonFilter <- dlmFilter(cottonRets$daily_return, cottonModel)
-coffeeFilter <- dlmFilter(coffeeRets$daily_return, coffeeModel)
-orangeFilter <- dlmFilter(orangeRets$daily_return, orangeModel)
+sugarFilter <-   dlmFilter(sugarRets, sugarModel)
+cocoaFilter <-   dlmFilter(cocoaRets, cocoaModel)
+cottonFilter <- dlmFilter(cottonRets, cottonModel)
+coffeeFilter <- dlmFilter(coffeeRets, coffeeModel)
+orangeFilter <- dlmFilter(orangeRets, orangeModel)
 
 #sugarFilter$m
 
@@ -823,10 +827,20 @@ dlm_frcst <- list(sugarFilter$f,
                  orangeFilter$f)
 
 
+quadrado <- function(x){
+  
+  return(x^2)
+}
+
 dlm_tidy <- tibble(cmdty = cmdties,
-                   model = list(sugar_efit, cocoa_efit, 
-                             cotton_efit, coffee_efit,
-                             orange_efit))
+                   model = dlm_frcst,
+                   module = lapply(model, abs),
+                   square = lapply(model, quadrado),
+                   mae = lapply(module, mean),
+                   mse = lapply(square, mean)) %>% 
+  select(cmdty, mae, mse) %>% 
+  unnest(mae) %>% 
+  unnest(mse)
 
 #sugarSmooth$s
 
@@ -1001,69 +1015,64 @@ plotOutput("errors_comp")
 
 
 
-#errors <- reactive({tidier_lm %>% 
-#  mutate(perf = map(model, augment)) %>% 
-#  select(cmdty, perf) %>% 
-#  unnest(perf) %>% 
-#  mutate(mse = mean(.resid^2),
-#         mae = mean(abs(.resid))) %>% 
-#  group_by(cmdty) %>% 
-#  summarise(across(c("mse","mae"), mean)) %>% 
-#  mutate(modelo = "estático") %>% 
-#bind_rows(tidy_betas %>% 
-#  group_by(cmdty) %>% 
-#  summarise(across(c("mae","mse"), mean)) %>% 
-#  mutate(modelo = "garch")) %>% 
-#bind_rows(rolling_tidy %>% 
-#  mutate(perf = map(model, augment)) %>% 
-#  select(cmdty, perf) %>% 
-#  unnest(perf) %>% 
-#  mutate(mse = mean(.resid^2),
-#         mae = mean(abs(.resid))) %>% 
-#  group_by(cmdty) %>% 
-#  summarise(across(c("mae","mse"), mean)) %>% 
-#  mutate(modelo = "rolling_window")) %>% 
-#bind_rows(expanding_tidy %>% 
-#  mutate(perf = map(model, augment)) %>% 
-#  select(cmdty, perf) %>% 
-#  unnest(perf) %>% 
-#  mutate(mse = mean(.resid^2),
-#         mae = mean(abs(.resid))) %>% 
-#  group_by(cmdty) %>% 
-#  summarise(across(c("mae","mse"), mean)) %>% 
-#  mutate(modelo = "expanding_window")) %>% 
-#bind_rows(dlm_tidy %>% 
-#  mutate(perf = map(model, augment)) %>% 
-#  select(cmdty, perf) %>% 
-#  unnest(perf) %>% 
-#  mutate(mse = mean(.resid^2),
-#         mae = mean(abs(.resid))) %>% 
-#  group_by(cmdty) %>% 
-#  summarise(across(c("mae","mse"), mean)) %>% 
-#  mutate(modelo = "dlm")) %>% 
-#left_join(tidier_lm %>% 
-#            mutate(perf = map(model, augment)) %>% 
-#            select(cmdty, perf) %>% 
-#            unnest(perf) %>% 
-#            mutate(mse_est = mean(.resid^2),
-#                   mae_est = mean(abs(.resid))) %>% 
-#            group_by(cmdty) %>% 
-#            summarise(across(c("mse_est","mae_est"), mean)), #%>% mutate(modelo = "estático"),
-#          by = "cmdty") %>% 
-#  mutate(mse_ratio = mse/mse_est,
-#         mae_ratio = mae/mae_est)
+#errors <- reactive({
 #  
-#  #write_csv(errors, "output/errors.csv")
+  errors <- tidier_lm %>% 
+  mutate(perf = map(model, augment)) %>% 
+  select(cmdty, perf) %>% 
+  unnest(perf) %>% 
+  mutate(mse = mean(.resid^2),
+         mae = mean(abs(.resid))) %>% 
+  group_by(cmdty) %>% 
+  summarise(across(c("mse","mae"), mean)) %>% 
+  mutate(modelo = "estático") %>% 
+bind_rows(tidy_betas %>% 
+  group_by(cmdty) %>% 
+  summarise(across(c("mae","mse"), mean)) %>% 
+  mutate(modelo = "garch")) %>% 
+bind_rows(rolling_tidy %>% 
+  mutate(perf = map(model, augment)) %>% 
+  select(cmdty, perf) %>% 
+  unnest(perf) %>% 
+  mutate(mse = mean(.resid^2),
+         mae = mean(abs(.resid))) %>% 
+  group_by(cmdty) %>% 
+  summarise(across(c("mae","mse"), mean)) %>% 
+  mutate(modelo = "rolling_window")) %>% 
+bind_rows(expanding_tidy %>% 
+  mutate(perf = map(model, augment)) %>% 
+  select(cmdty, perf) %>% 
+  unnest(perf) %>% 
+  mutate(mse = mean(.resid^2),
+         mae = mean(abs(.resid))) %>% 
+  group_by(cmdty) %>% 
+  summarise(across(c("mae","mse"), mean)) %>% 
+  mutate(modelo = "expanding_window")) %>% 
+bind_rows(dlm_tidy %>% 
+  mutate(modelo = "dlm")) %>% 
+left_join(tidier_lm %>% 
+            mutate(perf = map(model, augment)) %>% 
+            select(cmdty, perf) %>% 
+            unnest(perf) %>% 
+            mutate(mse_est = mean(.resid^2),
+                   mae_est = mean(abs(.resid))) %>% 
+            group_by(cmdty) %>% 
+            summarise(across(c("mse_est","mae_est"), mean)), #%>% mutate(modelo = "estático"),
+          by = "cmdty") %>% 
+  mutate(mse_ratio = mse/mse_est,
+         mae_ratio = mae/mae_est)
+  
+  write_csv(errors, "output/errors.csv")
 #  
 #})
-
+#
 output$errors_comp <- renderPlot({
 errors %>%
   pivot_longer(cols = c("mse", "mae"),
                names_to = "error",
                values_to = "value") %>% 
   ggplot(aes(cmdty, value, color = modelo)) +
-  geom_point(alpha = 0.7) +
+  geom_point(alpha = 0.7, size = 3) +
   facet_wrap(~error, scales = "free_y", nrow = 2) +
   labs(x = "", y = "")
 
@@ -1087,12 +1096,12 @@ plotOutput("best_model")
 
 output$best_model <- renderPlot({
 
-  errors %>%
+errors %>%
   pivot_longer(cols = c("mse_ratio", "mae_ratio"),
                names_to = "error",
                values_to = "value") %>% 
   ggplot(aes(cmdty, value, color = modelo)) +
-  geom_point(alpha = 0.7) +
+  geom_point(alpha = 0.7, size = 3) +
   facet_wrap(~error, scales = "free_y", nrow = 2) +
   labs(x = "", y = "")
 
