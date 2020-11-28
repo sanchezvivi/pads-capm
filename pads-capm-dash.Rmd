@@ -128,6 +128,17 @@ Introdução
 Row {.tabset}
 ----------------------------------
 
+### Capa
+
+```{r}
+
+include_graphics("img/capm-dinamico/Slide1.png")
+
+#HTML('<left><img src="mg/ice_contract.png"></left>')
+
+```
+
+
 ### Ativos
 
 <font size = "7">Modelagem dinâmica dos preços das commodities softs listadas na [Intercontinental Exchange (ICE)](https://www.theice.com/products/Futures-Options/Agriculture)</font>
@@ -1113,15 +1124,17 @@ errors %>%
 Conclusão
 ======================
 
-<font size = "4">
+### Conclusão
 
-  - Commodities
+```{r}
 
-  - Melhor modelo
+include_graphics("img/capm-dinamico/Slide2.png")
 
-  - Aplicações
+#HTML('<left><img src="mg/ice_contract.png"></left>')
 
-</font>
+```
+
+
 
 Referências
 ========================
