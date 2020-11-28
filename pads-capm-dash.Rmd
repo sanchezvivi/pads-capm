@@ -77,7 +77,7 @@ quandl_api_key(Sys.getenv("QUANDL_TOKEN"))
 
 ```
 
-```{r global, message=FALSE, warning=FALSE, cache=FALSE, context="data", include=FALSE}
+```{r global, message=FALSE, warning=FALSE, cache=TRUE, context="data", include=FALSE}
 
 cmdty_name <- c("sugar","cocoa","cotton","coffee", "orange_juice", "xbcom")
 
@@ -106,6 +106,8 @@ cmdty_raw <- tq_get(tickers, get = "quandl", from = "2018-01-01", to  = Sys.Date
 #cmdty_raw %>% 
  # glimpse
 
+cmdties <- c("sugar","cocoa","cotton","coffee", "orange_juice")
+
 conv_tb <- tibble(cmdty =  c("sugar","cocoa","cotton","coffee", "orange_juice"),
                   contract_size = c(112000, 10, 50000, 37500, 15000),
                   unit = c("lb", "lb", "lb","t","lb"),
@@ -116,12 +118,17 @@ prices <- cmdty_raw %>%
   filter(date == max(date)) %>% 
   select(cmdty, settle)
 
+errors <- read_csv("output/errors.csv")
+
 ```
 
 Introdução
 ==============================
-Row
-------------------------------------------------------
+
+Row {.tabset}
+----------------------------------
+
+### Ativos
 
 <font size = "7">Modelagem dinâmica dos preços das commodities softs listadas na [Intercontinental Exchange (ICE)](https://www.theice.com/products/Futures-Options/Agriculture)</font>
 
@@ -137,16 +144,25 @@ Row
 
 -    <font size = "5">Benchamrk: [Bloomberg Commodity Index](https://www.bloomberg.com/company/press/bloomberg-commodity-index-2020-target-weights-announced/) - `bcom`</font>
 
-Column
-------------------------------------------------------
 
-```{r fig.align="right", out.width = "20%"}
+### Especificação
+
+```{r}
 
 include_graphics("img/ice_contract.png")
 
 #HTML('<left><img src="mg/ice_contract.png"></left>')
 
 ```
+
+### Bloomberg Commodity Index
+
+```{r}
+
+include_graphics("img/bcom.png")
+
+```
+
 
 Contratos
 ============================================
@@ -161,7 +177,7 @@ selectInput("ticker_id", label = "Commodity", choices = conv_tb$cmdty,
             selected = "sugar")
 
 numericInput("lots_id", label = "Número de lotes",
-            value = 1000, step = 100) 
+            value = 1, step = 1) 
 
 uiOutput("price_in")
 
@@ -177,18 +193,22 @@ column(6, align="center", offset = 3,
 output$price_in <- renderUI({
   
 px <- reactive({
+  
 prices %>% 
+  #filter(cmdty == "sugar") %>% 
   filter(cmdty == input$ticker_id) %>% 
-  pull(settle)})
+  pull(settle) 
+  })
 
 tick <- reactive({
   conv_tb %>% 
       filter(cmdty == input$ticker_id) %>% 
-      pull(tick_size)})
+      pull(tick_size)
+  })
   
 numericInput("price_id", label = "Preço",
-            #value = px(), 
-            value = 15,
+            value = px(), 
+            #value = prices$settle[1],
             step = tick()
             ) 
 })
@@ -288,7 +308,7 @@ valueBox(value = formatC(paste(notional(), " Dólares"), format = 's'),
 ```
 
 Row {data-height="650"}
------------------------
+-----------------------------------------
 
 ### Preços
 
@@ -459,6 +479,7 @@ tidier_lm <- tidy_lm %>%
   fill(intercept) %>% na.omit() %>% 
   rename(alpha = intercept,
         beta = bmk_return)
+  
 
 output$static_capm <- renderPlot({
 
@@ -476,7 +497,7 @@ tidier_lm %>%
 
 output$static_betas <- renderPlot({
 
-  tidy_lm %>%
+tidy_lm %>%
   mutate(term = if_else(term == "bmk_return", "beta", "alpha")) %>% 
   #filter(term == "bmk_return") %>%
   ggplot(aes(estimate, p.value, label = cmdty)) +
@@ -510,6 +531,10 @@ highchartOutput("rolling_betas")
 
 ```{r warning=FALSE, context="server"}
 
+
+
+
+
 output$rolling_betas <- renderHighchart({
 
 sugarRets <- returns_tb %>% unnest(col = 'returns') %>% filter(cmdty == 'sugar')
@@ -529,18 +554,27 @@ wf <- (nPer - w0)
 
 rBetas <- matrix(NA, wf, 5)
 for (t in 1:wf){
-  sugar_rfit = lm(sugarRets$daily_return[t:(w0+t)] ~ sugarRets$bmk_return[t:(w0+t)])
-  cocoa_rfit = lm(cocoaRets$daily_return[t:(w0+t)] ~ cocoaRets$bmk_return[t:(w0+t)])
-  cotton_rfit = lm(cottonRets$daily_return[t:(w0+t)] ~ cottonRets$bmk_return[t:(w0+t)])
-  coffee_rfit = lm(coffeeRets$daily_return[t:(w0+t)] ~ coffeeRets$bmk_return[t:(w0+t)])
-  orange_rfit = lm(orangeRets$daily_return[t:(w0+t)] ~ orangeRets$bmk_return[t:(w0+t)])
+  sugar_rfit  <- lm(sugarRets$daily_return[t:(w0+t)] ~ sugarRets$bmk_return[t:(w0+t)])
+  cocoa_rfit  <- lm(cocoaRets$daily_return[t:(w0+t)] ~ cocoaRets$bmk_return[t:(w0+t)])
+  cotton_rfit <-  lm(cottonRets$daily_return[t:(w0+t)] ~ cottonRets$bmk_return[t:(w0+t)])
+  coffee_rfit <-  lm(coffeeRets$daily_return[t:(w0+t)] ~ coffeeRets$bmk_return[t:(w0+t)])
+  orange_rfit <-  lm(orangeRets$daily_return[t:(w0+t)] ~ orangeRets$bmk_return[t:(w0+t)])
 
-  rBetas[t,]= c(sugar_rfit$coefficients[2],
+  rBetas[t,] <-  c(sugar_rfit$coefficients[2],
                cocoa_rfit$coefficients[2],
                cotton_rfit$coefficients[2],
                coffee_rfit$coefficients[2],
                orange_rfit$coefficients[2])
+  
+
 }
+
+
+rolling_tidy <- tibble(cmdty = cmdties,
+                   model = list(sugar_rfit, cocoa_rfit, 
+                             cotton_rfit, coffee_rfit,
+                             orange_rfit))
+
 
 sBetas <- tidy_lm %>% 
   filter(term == 'bmk_return') %>% 
@@ -661,6 +695,10 @@ e_betas <- as_tibble(eBetas) %>%
   arrange(cmdty) %>% 
   left_join(sBetas, by = "cmdty")
 
+expanding_tidy <- tibble(cmdty = cmdties,
+                   model = list(sugar_efit, cocoa_efit, 
+                             cotton_efit, coffee_efit,
+                             orange_efit))
 
 highchart() %>%
 hc_add_series(data = e_betas,
@@ -777,6 +815,19 @@ cottonSmooth <- dlmSmooth(cottonFilter)
 coffeeSmooth <- dlmSmooth(coffeeFilter)
 orangeSmooth <- dlmSmooth(orangeFilter)
 
+
+dlm_frcst <- list(sugarFilter$f,
+                  cocoaFilter$f, 
+                 cottonFilter$f,
+                 coffeeFilter$f,
+                 orangeFilter$f)
+
+
+dlm_tidy <- tibble(cmdty = cmdties,
+                   model = list(sugar_efit, cocoa_efit, 
+                             cotton_efit, coffee_efit,
+                             orange_efit))
+
 #sugarSmooth$s
 
 dlm_Betas <- tibble(sugar = sugarFilter$m[,2],
@@ -839,6 +890,8 @@ CAPM com Volatilidade
 Row {.tabset}
 ------------------------------------------------------
 
+### GARCH
+
 ```{r}
 
 plotOutput("garch_dlm")
@@ -849,7 +902,7 @@ plotOutput("garch_dlm")
 
 ```{r warning=FALSE, context="server"}
 
-output$garch_dlm <- renderHighchart({
+output$garch_dlm <- renderPlot({
 
 garch_var <- function(garch_fit){
   
@@ -924,19 +977,155 @@ tidy_betas %>%
   scale_color_manual(values = hc_cols) +
   labs(x = "", y = "Beta")
 
+})
+
+```
+
+Comparação
+===================
+
+Row {.tabset}
+-------------------------------
+
+### Erro
+
+```{r}
+
+
+plotOutput("errors_comp")
+
+
+```
+
+```{r warning=FALSE, context="server"}
+
+
+
+#errors <- reactive({tidier_lm %>% 
+#  mutate(perf = map(model, augment)) %>% 
+#  select(cmdty, perf) %>% 
+#  unnest(perf) %>% 
+#  mutate(mse = mean(.resid^2),
+#         mae = mean(abs(.resid))) %>% 
+#  group_by(cmdty) %>% 
+#  summarise(across(c("mse","mae"), mean)) %>% 
+#  mutate(modelo = "estático") %>% 
+#bind_rows(tidy_betas %>% 
+#  group_by(cmdty) %>% 
+#  summarise(across(c("mae","mse"), mean)) %>% 
+#  mutate(modelo = "garch")) %>% 
+#bind_rows(rolling_tidy %>% 
+#  mutate(perf = map(model, augment)) %>% 
+#  select(cmdty, perf) %>% 
+#  unnest(perf) %>% 
+#  mutate(mse = mean(.resid^2),
+#         mae = mean(abs(.resid))) %>% 
+#  group_by(cmdty) %>% 
+#  summarise(across(c("mae","mse"), mean)) %>% 
+#  mutate(modelo = "rolling_window")) %>% 
+#bind_rows(expanding_tidy %>% 
+#  mutate(perf = map(model, augment)) %>% 
+#  select(cmdty, perf) %>% 
+#  unnest(perf) %>% 
+#  mutate(mse = mean(.resid^2),
+#         mae = mean(abs(.resid))) %>% 
+#  group_by(cmdty) %>% 
+#  summarise(across(c("mae","mse"), mean)) %>% 
+#  mutate(modelo = "expanding_window")) %>% 
+#bind_rows(dlm_tidy %>% 
+#  mutate(perf = map(model, augment)) %>% 
+#  select(cmdty, perf) %>% 
+#  unnest(perf) %>% 
+#  mutate(mse = mean(.resid^2),
+#         mae = mean(abs(.resid))) %>% 
+#  group_by(cmdty) %>% 
+#  summarise(across(c("mae","mse"), mean)) %>% 
+#  mutate(modelo = "dlm")) %>% 
+#left_join(tidier_lm %>% 
+#            mutate(perf = map(model, augment)) %>% 
+#            select(cmdty, perf) %>% 
+#            unnest(perf) %>% 
+#            mutate(mse_est = mean(.resid^2),
+#                   mae_est = mean(abs(.resid))) %>% 
+#            group_by(cmdty) %>% 
+#            summarise(across(c("mse_est","mae_est"), mean)), #%>% mutate(modelo = "estático"),
+#          by = "cmdty") %>% 
+#  mutate(mse_ratio = mse/mse_est,
+#         mae_ratio = mae/mae_est)
+#  
+#  #write_csv(errors, "output/errors.csv")
+#  
+#})
+
+output$errors_comp <- renderPlot({
+errors %>%
+  pivot_longer(cols = c("mse", "mae"),
+               names_to = "error",
+               values_to = "value") %>% 
+  ggplot(aes(cmdty, value, color = modelo)) +
+  geom_point(alpha = 0.7) +
+  facet_wrap(~error, scales = "free_y", nrow = 2) +
+  labs(x = "", y = "")
+
 
 })
 
 ```
 
+### Melhor Modelo
+
+
+```{r}
+
+
+plotOutput("best_model")
+
+```
+
+
+```{r warning=FALSE, context="server"}
+
+output$best_model <- renderPlot({
+
+  errors %>%
+  pivot_longer(cols = c("mse_ratio", "mae_ratio"),
+               names_to = "error",
+               values_to = "value") %>% 
+  ggplot(aes(cmdty, value, color = modelo)) +
+  geom_point(alpha = 0.7) +
+  facet_wrap(~error, scales = "free_y", nrow = 2) +
+  labs(x = "", y = "")
+
+})
+
+
+```
+
 Conclusão
-===================
+======================
 
--   Comparar betas vs Benchmark
+<font size = "4">
 
--   Comparar erros dos modelos
+  - Commodities
+
+  - Melhor modelo
+
+  - Aplicações
+
+</font>
 
 Referências
 ========================
 
--   [Train and analyze many models for \#TidyTuesday crop yields](https://juliasilge.com/blog/crop-yields/)
+<font size = "4">
+
+- Material da matéria Financial Analytics
+- Tsay, R. Analysis of Financial Time Series
+- Tsay, R. An Introduction to Analysis of Financial Data with R
+- II - Alexander, C. Market Risk Analysis - Practical Financial Econometrics
+- [ICE](https://www.theice.com/products/Futures-Options/Agriculture)
+- [Bloomberg](https://www.bloomberg.com/company/press/bloomberg-commodity-index-2020-target-weights-announced/)
+-[Train and analyze many models for \#TidyTuesday crop yields](https://juliasilge.com/blog/crop-yields/)
+- Quandl
+
+</font>
