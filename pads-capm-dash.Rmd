@@ -1017,52 +1017,52 @@ plotOutput("errors_comp")
 
 #errors <- reactive({
 #  
-  errors <- tidier_lm %>% 
-  mutate(perf = map(model, augment)) %>% 
-  select(cmdty, perf) %>% 
-  unnest(perf) %>% 
-  mutate(mse = mean(.resid^2),
-         mae = mean(abs(.resid))) %>% 
-  group_by(cmdty) %>% 
-  summarise(across(c("mse","mae"), mean)) %>% 
-  mutate(modelo = "estático") %>% 
-bind_rows(tidy_betas %>% 
-  group_by(cmdty) %>% 
-  summarise(across(c("mae","mse"), mean)) %>% 
-  mutate(modelo = "garch")) %>% 
-bind_rows(rolling_tidy %>% 
-  mutate(perf = map(model, augment)) %>% 
-  select(cmdty, perf) %>% 
-  unnest(perf) %>% 
-  mutate(mse = mean(.resid^2),
-         mae = mean(abs(.resid))) %>% 
-  group_by(cmdty) %>% 
-  summarise(across(c("mae","mse"), mean)) %>% 
-  mutate(modelo = "rolling_window")) %>% 
-bind_rows(expanding_tidy %>% 
-  mutate(perf = map(model, augment)) %>% 
-  select(cmdty, perf) %>% 
-  unnest(perf) %>% 
-  mutate(mse = mean(.resid^2),
-         mae = mean(abs(.resid))) %>% 
-  group_by(cmdty) %>% 
-  summarise(across(c("mae","mse"), mean)) %>% 
-  mutate(modelo = "expanding_window")) %>% 
-bind_rows(dlm_tidy %>% 
-  mutate(modelo = "dlm")) %>% 
-left_join(tidier_lm %>% 
-            mutate(perf = map(model, augment)) %>% 
-            select(cmdty, perf) %>% 
-            unnest(perf) %>% 
-            mutate(mse_est = mean(.resid^2),
-                   mae_est = mean(abs(.resid))) %>% 
-            group_by(cmdty) %>% 
-            summarise(across(c("mse_est","mae_est"), mean)), #%>% mutate(modelo = "estático"),
-          by = "cmdty") %>% 
-  mutate(mse_ratio = mse/mse_est,
-         mae_ratio = mae/mae_est)
-  
-  write_csv(errors, "output/errors.csv")
+#  errors <- tidier_lm %>% 
+#  mutate(perf = map(model, augment)) %>% 
+#  select(cmdty, perf) %>% 
+#  unnest(perf) %>% 
+#  mutate(mse = mean(.resid^2),
+#         mae = mean(abs(.resid))) %>% 
+#  group_by(cmdty) %>% 
+#  summarise(across(c("mse","mae"), mean)) %>% 
+#  mutate(modelo = "estático") %>% 
+#bind_rows(tidy_betas %>% 
+#  group_by(cmdty) %>% 
+#  summarise(across(c("mae","mse"), mean)) %>% 
+#  mutate(modelo = "garch")) %>% 
+#bind_rows(rolling_tidy %>% 
+#  mutate(perf = map(model, augment)) %>% 
+#  select(cmdty, perf) %>% 
+#  unnest(perf) %>% 
+#  mutate(mse = mean(.resid^2),
+#         mae = mean(abs(.resid))) %>% 
+#  group_by(cmdty) %>% 
+#  summarise(across(c("mae","mse"), mean)) %>% 
+#  mutate(modelo = "rolling_window")) %>% 
+#bind_rows(expanding_tidy %>% 
+#  mutate(perf = map(model, augment)) %>% 
+#  select(cmdty, perf) %>% 
+#  unnest(perf) %>% 
+#  mutate(mse = mean(.resid^2),
+#         mae = mean(abs(.resid))) %>% 
+#  group_by(cmdty) %>% 
+#  summarise(across(c("mae","mse"), mean)) %>% 
+#  mutate(modelo = "expanding_window")) %>% 
+#bind_rows(dlm_tidy %>% 
+#  mutate(modelo = "dlm")) %>% 
+#left_join(tidier_lm %>% 
+#            mutate(perf = map(model, augment)) %>% 
+#            select(cmdty, perf) %>% 
+#            unnest(perf) %>% 
+#            mutate(mse_est = mean(.resid^2),
+#                   mae_est = mean(abs(.resid))) %>% 
+#            group_by(cmdty) %>% 
+#            summarise(across(c("mse_est","mae_est"), mean)), #%>% mutate(modelo = "estático"),
+#          by = "cmdty") %>% 
+#  mutate(mse_ratio = mse/mse_est,
+#         mae_ratio = mae/mae_est)
+#  
+ # write_csv(errors, "output/errors.csv")
 #  
 #})
 #
