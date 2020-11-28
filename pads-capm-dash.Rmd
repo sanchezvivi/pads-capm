@@ -110,7 +110,7 @@ cmdties <- c("sugar","cocoa","cotton","coffee", "orange_juice")
 
 conv_tb <- tibble(cmdty =  c("sugar","cocoa","cotton","coffee", "orange_juice"),
                   contract_size = c(112000, 10, 50000, 37500, 15000),
-                  unit = c("lb", "lb", "lb","t","lb"),
+                  unit = c("lb", "t", "lb","lb","lb"),
                   tick_size = c(0.01, 1, 0.01, 0.05, 0.05))
 
 
@@ -273,7 +273,6 @@ weight <- reactive({
   
 })
 
-
 output$weight <- renderValueBox({ 
   
   click <- input$update_button
@@ -377,7 +376,7 @@ cmdty_raw %>%
 renderHighchart({
 
 cmdty_raw %>% 
-      mutate(daily_return = daily_return*100) %>% 
+      mutate(acc_return = acc_return*100) %>% 
       hchart(., "line", 
              hcaes(x = date, y = acc_return, group = cmdty)) %>% 
       #hc_colors(cols) %>%
@@ -476,7 +475,7 @@ returns_tb <- cmdty_raw %>%
 # ajuste dos modelos
 tidy_capm <- returns_tb %>% 
   mutate(model = map(returns, ~lm(daily_return ~ bmk_return, data = .x)))
-  
+
 # resuttado dos modelos
 tidy_lm <- tidy_capm %>%
   mutate(coefs = map(model, tidy)) %>%
@@ -512,10 +511,10 @@ output$static_betas <- renderPlot({
 tidy_lm %>%
   mutate(term = if_else(term == "bmk_return", "beta", "alpha")) %>% 
   #filter(term == "bmk_return") %>%
-  ggplot(aes(estimate, p.value, label = cmdty)) +
+  ggplot(aes(estimate, p.value, label = round(estimate, 2))) +
   geom_vline(xintercept = 0, lty = 2,
     size = 1.5, alpha = 0.7, color = "gray50") +
-  geom_point(aes(color = cmdty), alpha = 0.8, size = 2.5, show.legend = FALSE) +
+  geom_point(aes(color = cmdty), alpha = 0.8, size = 2.5, show.legend = T) +
   scale_y_log10() +
   facet_wrap(~term) +
   geom_text_repel(size = 5) +
@@ -1006,7 +1005,7 @@ tidy_betas %>%
 
 ```
 
-Comparação
+Backtesting
 ===================
 
 Row {.tabset}
